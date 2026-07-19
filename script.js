@@ -135,5 +135,13 @@ function setupProductCardLinks() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => { orderHomepageSections(); setupHomepageProductDropdown(); setupProductCardLinks(); setupQuiz(); setupAuthentication(); setupAccount(); });
+function setupStoryCards() {
+  document.querySelectorAll('.story').forEach(card => {
+    card.addEventListener('click', () => {
+      card.classList.toggle('flipped');
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => { orderHomepageSections(); setupHomepageProductDropdown(); setupProductCardLinks(); setupQuiz(); setupAuthentication(); setupAccount(); setupStoryCards(); });
 
