@@ -70,8 +70,8 @@ function setupAuthentication() {
   };
   document.querySelector('#otp-back').onclick = () => { otpScreen.classList.add('hidden'); start.classList.remove('hidden'); };
   otpInputs.forEach((input, index) => input.addEventListener('input', () => { if (input.value && otpInputs[index + 1]) otpInputs[index + 1].focus(); }));
-  document.querySelector('#verify-otp').onclick = () => window.location.href = 'account.html';
-  document.querySelector('#google-signin').onclick = () => window.location.href = 'account.html';
+  document.querySelector('#verify-otp').onclick = () => { localStorage.setItem('neokesan_signedin','true'); window.dispatchEvent(new Event('authchange')); window.location.href = 'account.html'; };
+  document.querySelector('#google-signin').onclick = () => { localStorage.setItem('neokesan_signedin','true'); window.dispatchEvent(new Event('authchange')); window.location.href = 'account.html'; };
   document.querySelector('#resend-otp').onclick = () => alert('A new demo code has been sent. Connect this button to your OTP provider before launch.');
 }
 
