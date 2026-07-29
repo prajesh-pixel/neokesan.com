@@ -122,7 +122,7 @@ function setupHomepageProductDropdown() {
 }
 
 function setupProductCardLinks() {
-  const routes = { 'NeoPonic A & B': 'neoponic.html', 'NeoBloom X1': 'neobloom.html', 'NeoBloom X2': 'neobloom.html', 'NeoFolix X1 & X2': 'neofolix.html' };
+  const routes = { 'NeoPonic A & B Full Set': 'neoponic.html', 'NeoBloom X1, X2 & X3 Full Set': 'neobloom.html', 'NeoFolix X1 & X2 Full Set': 'neofolix.html', 'NeoPonic A & B': 'neoponic.html', 'NeoBloom X1': 'neobloom.html', 'NeoBloom X2': 'neobloom.html', 'NeoFolix X1 & X2': 'neofolix.html' };
   document.querySelectorAll('.product').forEach(card => {
     const title = card.querySelector('h3')?.textContent;
     if (!routes[title]) return;
@@ -135,6 +135,22 @@ function setupProductCardLinks() {
   });
 }
 
+function setupCarousels() {
+  document.querySelectorAll('.product-carousel').forEach(carousel => {
+    const slides = carousel.querySelectorAll('.carousel-slide');
+    const prev = carousel.querySelector('.carousel-prev');
+    const next = carousel.querySelector('.carousel-next');
+    let current = 0;
+    function show(idx) {
+      slides.forEach(s => s.classList.remove('active'));
+      current = (idx + slides.length) % slides.length;
+      slides[current].classList.add('active');
+    }
+    if (prev) prev.onclick = e => { e.stopPropagation(); show(current - 1); };
+    if (next) next.onclick = e => { e.stopPropagation(); show(current + 1); };
+  });
+}
+
 function setupStoryCards() {
   document.querySelectorAll('.story').forEach(card => {
     card.addEventListener('click', () => {
@@ -143,5 +159,5 @@ function setupStoryCards() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => { orderHomepageSections(); setupHomepageProductDropdown(); setupProductCardLinks(); setupQuiz(); setupAuthentication(); setupAccount(); setupStoryCards(); });
+document.addEventListener('DOMContentLoaded', () => { orderHomepageSections(); setupHomepageProductDropdown(); setupProductCardLinks(); setupCarousels(); setupQuiz(); setupAuthentication(); setupAccount(); setupStoryCards(); });
 

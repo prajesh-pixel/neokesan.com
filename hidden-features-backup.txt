@@ -1,0 +1,132 @@
+Hidden Features Backup
+=====================
+File: index.html
+File: styles.css
+File: shared-layout.js
+Created: 2026-07-30
+
+To restore any feature: reverse the corresponding change below.
+
+--------------------------------------------------------------------
+1. Testimonial section (index.html)
+--------------------------------------------------------------------
+- What: <section class="section" id="testimonials" style="display:none">
+- File: index.html
+- How to restore: Remove style="display:none" from the testimonials <section> tag.
+
+--------------------------------------------------------------------
+2. Team section (index.html)
+--------------------------------------------------------------------
+- What: <section class="section" id="team" style="display:none">
+- File: index.html
+- How to restore: Remove style="display:none" from the team <section> tag.
+
+--------------------------------------------------------------------
+3. Consultancy nav link (shared-layout.js — header)
+--------------------------------------------------------------------
+- What: <a style="display:none">Consultancy</a>
+- File: shared-layout.js (line 1, inside siteHeader template)
+- How to restore: Remove style="display:none" from that <a> tag.
+
+--------------------------------------------------------------------
+4. Shop / Cart buttons (shared-layout.js — header)
+--------------------------------------------------------------------
+- What: Two buttons hidden:
+        <button class="icon-button cart-btn" style="display:none" ...>
+        <button class="mobile-cart" style="display:none" ...>
+- File: shared-layout.js (line 1, inside siteHeader template, .actions section)
+- How to restore: Remove style="display:none" from both cart buttons.
+
+--------------------------------------------------------------------
+5. Sign in button (shared-layout.js — header)
+--------------------------------------------------------------------
+- What: <button class="button ghost auth-trigger auth-trigger-hidden" style="display:none">Sign in</button>
+- File: shared-layout.js (line 1, inside siteHeader template, .actions section)
+- CSS: .auth-trigger-hidden{display:none!important} in styles.css
+- How to restore:
+  1. In shared-layout.js: Remove auth-trigger-hidden class and style="display:none"
+  2. In styles.css: Remove .auth-trigger-hidden{display:none!important}
+
+--------------------------------------------------------------------
+6. "Up to 20% off" discount text (index.html — shell quiz section)
+--------------------------------------------------------------------
+- What: <div class="discount" style="display:none">Up to 20% off</div>
+- File: index.html (shell/quiz section)
+- How to restore: Remove style="display:none" from that <div>.
+
+--------------------------------------------------------------------
+7. Add-to-cart button hidden — product pages (product-page.js)
+--------------------------------------------------------------------
+- What: Add-to-cart button removed, quantity selector removed, original buy-now links replaced
+- File: product-page.js (renderProduct function, purchase-row section)
+- Original code:
+    <div class="quantity"><button id="minus"></button><span id="quantity">1</span><button id="plus">+</button></div>
+    <div class="buy-buttons">
+      <a href="https://shop.neokesan.com/product/${prodSlug}/?add-to-cart=${prodId}&amp;quantity=1" class="cart-button" id="add-to-cart-link">Add to cart</a>
+      <a href="https://shop.neokesan.com/product/${prodSlug}/" class="buy-button">Buy now</a>
+    </div>
+- Replaced with: Single Amazon buy-now button (Amazon link per product)
+- How to restore: Replace the purchase-row div with the original code block above.
+  Also restore the bindProductPage function's quantity/cartLink logic:
+    let q=1;const qs=document.querySelector('#quantity');const cartLink=document.querySelector('#add-to-cart-link');
+    function updCart(){if(!cartLink)return;cartLink.href=cartLink.href.replace(/&quantity=\d+/,'&quantity='+q)}
+    document.querySelector('#minus').onclick=()=>{q=Math.max(1,q-1);qs.textContent=q;updCart()};
+    document.querySelector('#plus').onclick=()=>{q++;qs.textContent=q;updCart()};
+    (combined with variant button onclick prepending hero-img update)
+
+--------------------------------------------------------------------
+8. Add-to-cart hidden — homepage product cards (index.html)
+--------------------------------------------------------------------
+- What: Original "Add to cart" class="add" buttons replaced with "Buy on Amazon" class="buy-now" buttons
+- File: index.html (product-grid section)
+- Original per card: <a href="shop link" class="add">Add to cart</a>
+- Replaced with: <a href="https://www.amazon.in/dp/..." target="_blank" rel="noopener" class="add buy-now">Buy on Amazon</a>
+- How to restore: Change each .buy-now back to original shop link and remove the buy-now class.
+  NeoPonic shop link: https://shop.neokesan.com/product/neoponic/?add-to-cart=15&quantity=1
+  NeoBloom shop link: https://shop.neokesan.com/product/neobloom-set/?add-to-cart=19&quantity=1
+  NeoFolix shop link: https://shop.neokesan.com/product/neofolix/?add-to-cart=20&quantity=1
+
+--------------------------------------------------------------------
+9. Variant selector hidden — product pages (product-page.js)
+--------------------------------------------------------------------
+- What: "Select variant" buttons removed from all product pages
+- File: product-page.js (renderProduct function)
+- Original code:
+    <div class="select-label">Select variant</div>
+    <div class="variant-buttons">${p.variants.map(...)}</div>
+  And in bindProductPage:
+    document.querySelectorAll('.variant-buttons button').forEach(b=>b.onclick=()=>{
+      document.querySelectorAll('.variant-buttons button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      document.querySelector('#price').textContent=b.dataset.price
+    });
+- Replaced with: Just the price display (no variant selection, no "starting price" label)
+- How to restore: Add the variant buttons HTML back after the price div, and restore the variant button click handler inside bindProductPage before the dropdown logic.
+
+--------------------------------------------------------------------
+10. Footer changes — shared-layout.js
+--------------------------------------------------------------------
+- What: Three changes:
+  1. "Visit our shop" link removed from Products section
+  2. Entire "Learn" section hidden (style="display:none")
+  3. "My account" link removed from Support section
+- File: shared-layout.js (siteFooter template)
+- Original Products div: <h4>Products</h4><a href="neoponic.html">NeoPonic A & B</a><a href="neobloom.html">NeoBloom</a><a href="neofolix.html">NeoFolix</a><a href="https://shop.neokesan.com">Visit our shop</a>
+- Original Learn div: <div><h4>Learn</h4><a href="index.html#learn">Beginner guides</a><a href="index.html#learn">Video tutorials</a><a href="index.html#learn">Community</a></div>
+- Original Support div: <h4>Support</h4><a href="account.html">My account</a><a href="#about">Shipping</a><a href="#about">FAQs</a>
+- How to restore:
+  1. Add <a href="https://shop.neokesan.com">Visit our shop</a> back after NeoFolix link
+  2. Remove style="display:none" from the Learn section div
+  3. Add <a href="account.html">My account</a> back before the Shipping link
+
+--------------------------------------------------------------------
+11. Footer CSS changes — styles.css
+--------------------------------------------------------------------
+- What: Two visual fixes:
+  1. Grid changed from 5 columns (1.5fr 1fr 1fr 1fr 1.5fr) to 4 columns (1.5fr 1fr 1fr 1.8fr) — removing the now-hidden Learn column slot, giving Find us / map more space
+  2. Map iframe height increased from 150px to 200px
+  3. align-items:start added to footer-grid for top alignment across columns
+- File: styles.css (.footer-grid, .footer-map iframe)
+- How to restore:
+  1. Change grid-template-columns back to 1.5fr 1fr 1fr 1fr 1.5fr and remove align-items:start
+  2. Change .footer-map iframe height back to 150px

@@ -1,162 +1,135 @@
 /**
- * neoKesan Shop Navigation Updater
+ * neoKesan Footer Link Updater
  *
- * PASTE THIS ENTIRE SCRIPT into your browser's developer console (F12 → Console)
- * while logged into https://shop.neokesan.com/wp-admin/ as admin.
+ * The v2 script created custom footer overrides that are now writable.
+ * This script updates those overrides with proper URLs.
  *
- * It will update the header navigation and footer links
- * to point back to the main neokesan.com website.
+ * PASTE into wp-admin browser console (F12 → Console) while logged in.
  */
 
 (async function() {
-  console.log('🚀 neoKesan Shop Navigation Updater starting...');
+  console.log('🔗 neoKesan Footer Link Updater\n');
 
-  const API_ROOT = window.wpApiSettings?.root || 'https://shop.neokesan.com/wp-json/wp/v2/';
+  const API_ROOT = window.wpApiSettings?.root;
   const NONCE = window.wpApiSettings?.nonce;
+  if (!NONCE) { console.error('❌ Not logged into wp-admin.'); return; }
 
-  if (!NONCE) {
-    console.error('❌ wpApiSettings not found. Make sure you are logged into WordPress admin.');
-    console.error('   Navigate to any wp-admin page first, then run this script.');
-    return;
-  }
-
-  const headers = {
-    'Content-Type': 'application/json',
-    'X-WP-Nonce': NONCE,
+  const headers = { 'Content-Type': 'application/json', 'X-WP-Nonce': NONCE };
+  const api = async (method, path, body) => {
+    const url = path.startsWith('http') ? path : API_ROOT + path;
+    const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || res.status);
+    return data;
   };
 
-  async function api(method, path, body) {
-    const url = path.startsWith('http') ? path : API_ROOT + path;
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'same-origin',
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(`${method} ${path}: ${data.message || res.status}`);
-    return data;
-  }
-
   try {
-    // === STEP 1: Update Header Navigation (Post ID: 4) ===
-    console.log('📋 Step 1: Updating header navigation...');
+    // Get all footer template parts
+    const parts = await api('GET', 'wp/v2/template-parts?per_page=100');
+    const footers = parts.filter(p => p.area === 'footer');
 
-    const nav = await api('GET', 'navigation/4');
-    console.log('   Current nav content:', nav.content?.raw?.substring(0, 100));
+    console.log(`Found ${footers.length} footer template part(s):\n`);
 
-    // Replace Page List block with Page List + custom home link
-    const newNavContent = `<!-- wp:navigation-link {"label":"Home","url":"https://neokesan.com","kind":"custom","isTopLinkLevel":true} /-->\n<!-- wp:page-list /-->`;
+    for (const part of footers) {
+      console.log(`📋 Editing: "${part.title?.raw}" (id: ${part.id})`);
 
-    await api('PUT', 'navigation/4', {
-      content: newNavContent,
-      title: nav.title?.raw || 'Navigation',
-      status: 'publish',
-    });
-    console.log('   ✅ Header navigation updated — added "Home" link to neokesan.com');
+      // Fetch full content
+      const data = await api('GET', `wp/v2/template-parts/${encodeURIComponent(part.id)}`);
+      let content = data.content?.raw || '';
 
-    // === STEP 2: Get Footer Template Part ===
-    console.log('📋 Step 2: Finding footer template part...');
+      console.log('   Content preview:');
+      console.log('   ' + content.substring(0, 300) + '\n');
 
-    // Find the footer template part
-    const templates = await api('GET', 'templates?per_page=100');
-    const templateParts = await api('GET', 'template-parts?per_page=100');
+      // Track changes
+      let changes = 0;
 
-    console.log(`   Found ${templates.length} templates, ${templateParts.length} template parts`);
+      // Replace href="#" patterns with real URLs
+      // We need to replace each unique occurrence
+      if (content.includes('href="#"')) {
+        // Get all nav-link blocks to see what labels they have
+        const navLinks = content.match(/<!-- wp:navigation-link\s*({[^}]*})/g) || [];
+        console.log(`   Found ${navLinks.length} navigation link block(s) in content`);
 
-    // Look for footer-related template or template part
-    const footerTemplate = templateParts.find(tp =>
-      tp.slug?.includes('footer') || tp.title?.raw?.toLowerCase().includes('footer')
-    );
+        // Collect unique labels and URLs from the content
+        const labelMatches = content.match(/"label":"([^"]+)"/g) || [];
+        console.log('   Labels found:', labelMessages(labelMatches));
 
-    if (footerTemplate) {
-      console.log(`   Found footer template part: "${footerTemplate.title?.raw}" (ID: ${footerTemplate.id})`);
+        // Count how many "#" hrefs
+        const hashCount = (content.match(/"#"/g) || []).length;
+        console.log(`   Links with href="#": ${hashCount}`);
 
-      // Get the current content
-      const footerData = await api('GET', `template-parts/${encodeURIComponent(footerTemplate.id)}`);
-      console.log('   Current footer content (first 500 chars):', footerData.content?.raw?.substring(0, 500));
+        if (hashCount > 0) {
+          // Check if there's already a proper shop.neokesan.com link
+          if (!content.includes('shop.neokesan.com')) {
+            // Replace empty # links
+            // First, let's get each navigation-link block and parse it
+            const blocks = content.match(/<!-- wp:navigation-link\s*({[^}]+})\s*\/-->/g) || [];
+            for (let i = 0; i < blocks.length; i++) {
+              const block = blocks[i];
+              if (block.includes('"url":"#"')) {
+                // Extract label to determine the correct URL
+                const labelMatch = block.match(/"label":"([^"]+)"/);
+                const label = labelMatch ? labelMatch[1].toLowerCase() : '';
 
-      // The footer has # links that need updating. We'll replace them.
-      let footerContent = footerData.content?.raw || '';
+                let newUrl;
+                if (label === 'blog' || label === 'events' || label === 'patterns' || label === 'themes') {
+                  newUrl = 'https://neokesan.com/#learn';
+                } else if (label === 'about' || label === 'faqs' || label === 'authors') {
+                  newUrl = 'https://neokesan.com/#about';
+                } else if (label === 'shop') {
+                  newUrl = 'https://shop.neokesan.com/shop/';
+                } else {
+                  newUrl = 'https://neokesan.com';
+                }
 
-      // Replace navigation link URLs
-      const linkReplacements = [
-        // Menu 1 links
-        ['href="#"', 'href="https://neokesan.com/#learn"'],  // Blog
-        ['href="#"', 'href="https://neokesan.com/#about"'],    // About
-        ['href="#"', 'href="https://neokesan.com/#about"'],    // FAQs
-        ['href="#"', 'href="https://neokesan.com/#about"'],    // Authors
-
-        // Menu 2 links
-        ['href="#"', 'href="https://neokesan.com/#learn"'],    // Events
-        ['href="#"', 'href="https://shop.neokesan.com/shop/"'], // Shop
-        ['href="#"', 'href="https://neokesan.com/#learn"'],    // Patterns
-        ['href="#"', 'href="https://neokesan.com/#learn"'],    // Themes
-      ];
-
-      // Only replace the first occurrence of each pattern to avoid over-replacing
-      linkReplacements.forEach(([oldStr, newStr]) => {
-        footerContent = footerContent.replace(oldStr, newStr);
-      });
-
-      // Update "Twenty Twenty-Five" credit to neoKesan
-      footerContent = footerContent.replace(
-        /Twenty Twenty-Five/gi,
-        'neoKesan'
-      );
-
-      // Update "Designed with WordPress" credit
-      footerContent = footerContent.replace(
-        /Designed with WordPress/i,
-        'Powered by neoKesan'
-      );
-
-      await api('PUT', `template-parts/${encodeURIComponent(footerTemplate.id)}`, {
-        content: footerContent,
-        status: 'publish',
-      });
-      console.log('   ✅ Footer template part updated — links now point to neokesan.com');
-    } else {
-      // If no footer template part found, check the front page template
-      console.log('   No footer-specific template part found.');
-      console.log('   Checking front page and other templates...');
-
-      // Try the front-page or the active template
-      const templatesToCheck = templates.filter(t =>
-        t.slug === 'front-page' || t.slug === 'index' || t.slug === 'singular' || t.slug === 'page'
-      );
-
-      console.log(`   Found ${templatesToCheck.length} templates to check for footer navigation:`);
-      for (const t of templatesToCheck) {
-        console.log(`   - ${t.slug} (${t.title?.raw})`);
+                const newBlock = block.replace('"url":"#"', `"url":"${newUrl}"`);
+                content = content.replace(block, newBlock);
+                console.log(`   → Updated "${labelMatch ? labelMatch[1] : '?'}" → ${newUrl}`);
+                changes++;
+              }
+            }
+          } else {
+            console.log('   ⏭️ Already has shop.neokesan.com links');
+          }
+        }
       }
-    }
 
-    // === STEP 3: Update Site Title/Description ===
-    console.log('📋 Step 3: Updating site settings...');
-    try {
-      const settings = await api('GET', 'settings');
-      // Add a site description that mentions the main brand
-      if (!settings.description?.includes('neoKesan')) {
-        await api('PUT', 'settings', {
-          description: 'Official shop for neoKesan plant nutrition products — precision nutrients for modern Indian growers.',
+      // Update credit text
+      if (/\btwenty\s*twenty-?five\b/i.test(content)) {
+        content = content.replace(/\bTwenty\s*Twenty-?Five\b/gi, 'neoKesan');
+        changes++;
+        console.log('   → Updated "Twenty Twenty-Five" credit');
+      }
+      if (content.includes('Designed with WordPress')) {
+        content = content.replace(/Designed with WordPress/i, 'Powered by neoKesan');
+        changes++;
+        console.log('   → Updated "Designed with WordPress" credit');
+      }
+      if (content.includes('Proudly powered by')) {
+        // keep but maybe update text
+      }
+
+      if (changes > 0) {
+        await api('PUT', `wp/v2/template-parts/${encodeURIComponent(part.id)}`, {
+          content,
+          status: 'publish',
         });
-        console.log('   ✅ Site tagline updated with neoKesan branding');
+        console.log(`   ✅ Saved ${changes} change(s)\n`);
       } else {
-        console.log('   ⏭️ Site tagline already mentions neoKesan');
+        console.log('   ⏭️ No changes needed\n');
       }
-    } catch(e) {
-      console.warn('   ⚠️ Could not update settings:', e.message);
     }
 
-    console.log('');
-    console.log('✅ All updates complete! Refresh the shop site to see changes.');
-    console.log('   Header: "Home" link added → neokesan.com');
-    console.log('   Footer: Links updated → neokesan.com');
-    console.log('   Branding: Credits changed to neoKesan');
+    console.log('='.repeat(60));
+    console.log('✅ Done! Refresh the shop site to see footer updates.');
+    console.log('='.repeat(60));
 
   } catch (err) {
     console.error('❌ Error:', err.message);
     console.error('   Full error:', err);
+  }
+
+  function labelMessages(matches) {
+    return matches.map(m => m.replace(/"/g, '')).join(', ');
   }
 })();
