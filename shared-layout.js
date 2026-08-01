@@ -5,6 +5,13 @@ function mountSharedLayout() {
   document.querySelectorAll('[data-site-header]').forEach(node => node.innerHTML = siteHeader);
   document.querySelectorAll('[data-site-footer]').forEach(node => node.innerHTML = siteFooter);
 
+  /* Live prices from assets/live-prices.js (fall back to hardcoded values) */
+  document.querySelectorAll('[data-price-key]').forEach(el => {
+    const key = el.dataset.priceKey;
+    const live = window.NEOKESAN_PRICES && window.NEOKESAN_PRICES[key];
+    if (live) el.textContent = '₹' + live;
+  });
+
   /* Auth state UI */
   function updateAuthUI() {
     const isSignedIn = localStorage.getItem('neokesan_signedin') === 'true';
