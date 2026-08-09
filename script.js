@@ -1,22 +1,57 @@
 const quiz = [
-  ['What best describes your current setup?', ['Complete beginner at home', 'Hobbyist with a small setup', 'Serious home grower', 'Commercial grower']],
-  ['What do you mainly grow?', ['Leafy greens and herbs', 'Fruits and vegetables', 'Flowers and ornamentals', 'A mix of everything']],
-  ['Which system do you use?', ['Kratky / passive growing', 'DWC or NFT', 'Coco / soil-less media', 'I am not sure yet']],
-  ['What is your biggest challenge?', ['Getting started', 'Slow or pale growth', 'Poor flowering', 'Inconsistent yields']]
+  ['What are you growing?', [
+    'Leafy vegetables & herbs (Spinach, Lettuce, Coriander, Mint, Basil, etc)',
+    'Fruiting vegetables (Tomato, Strawberry, Brinjal, Cucumber, Capsicum, etc)',
+    'Flowers & ornamental plants (Rose, Marigold, Lily, Indoor ornamentals)',
+    'A mix of different plants',
+  ]],
+  ['How large is your growing area?', [
+    'Small (A few pots or balcony garden)',
+    'Medium (Home Garden or terrace garden; less than 25 sq. m)',
+    'Large (Kitchen Garden or backyard; less than 100 sq. m)',
+    'Farm or commercial cultivation (More than 100 sq. m)',
+  ]],
+  ['How are you growing your plants?', [
+    'Soil-based (Pots, grow bags, or garden beds)',
+    'Hydroponics',
+    'Cocopeat or other soilless media',
+    'Not sure / Other',
+  ]],
+  ['What is your main goal or challenge?', [
+    'I want faster and healthier plant growth.',
+    'I want more flowers and fruits.',
+    'My plants have yellow leaves or poor growth.',
+    'My plants are healthy—I want to keep them that way.',
+  ]],
 ];
 
 function setupQuiz() {
   const modal = document.querySelector('#quiz-modal');
   if (!modal) return;
+  const auth = window.NeoKesanAuth;
   const question = document.querySelector('#question');
   const options = document.querySelector('#options');
   const next = document.querySelector('#next');
+  const quizContent = document.querySelector('#quiz-content');
+  const prompt = document.querySelector('#quiz-prompt');
+  const result = document.querySelector('#result');
+  const recommendation = document.querySelector('#recommendation');
+  const resultNote = document.querySelector('#result-note');
+  const quizBuy = document.querySelector('#quiz-buy');
+  const promptCurrent = document.querySelector('#prompt-current');
+  const promptYes = document.querySelector('#prompt-yes');
+  const promptNo = document.querySelector('#prompt-no');
+  const retakeBtn = document.querySelector('#retake-btn');
   let current = 0;
   let selected = null;
+  let answers = [];
+  let pendingQuiz = false;
+  let existing = null; // the stored recommendation when we're just re-showing it
 
   function render() {
     selected = null;
     next.disabled = true;
+    next.textContent = current === quiz.length - 1 ? 'See recommendation' : 'Next';
     question.textContent = quiz[current][0];
     options.innerHTML = '';
     quiz[current][1].forEach(text => {
@@ -34,45 +69,131 @@ function setupQuiz() {
     document.querySelector('#step').textContent = `${current + 1} of ${quiz.length}`;
     document.querySelector('#bar').style.width = `${(current + 1) / quiz.length * 100}%`;
   }
-  document.querySelectorAll('.quiz-trigger').forEach(button => button.onclick = () => {
+
+  // Hide the other modal steps and start the questions from the top.
+  function showQuestions() {
+    result.classList.add('hidden');
+    if (prompt) prompt.classList.add('hidden');
+    quizContent.classList.remove('hidden');
     current = 0;
-    document.querySelector('#quiz-content').classList.remove('hidden');
-    document.querySelector('#result').classList.add('hidden');
+    answers = [];
     render();
+  }
+
+  // Render a recommendation — from a fresh submit or from the stored one.
+  function showResult(rec) {
+    quizContent.classList.add('hidden');
+    if (prompt) prompt.classList.add('hidden');
+    result.classList.remove('hidden');
+    recommendation.textContent = rec.title;
+    quizBuy.innerHTML = '';
+    (rec.products || []).forEach(product => {
+      const row = document.createElement('div');
+      row.style.cssText = 'border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px';
+      const name = document.createElement('b');
+      name.style.cssText = 'font-size:13px;color:var(--ink);line-height:1.4';
+      name.textContent = product.name;
+      const buy = document.createElement('a');
+      buy.className = 'button primary';
+      buy.href = product.url;
+      buy.target = '_blank';
+      buy.rel = 'noopener';
+      buy.dataset.key = product.key;
+      buy.textContent = 'Buy on Amazon →';
+      buy.onclick = () => recordAmazonClick(product);
+      row.append(name, buy);
+      quizBuy.append(row);
+    });
+    resultNote.textContent = rec.attempt_no
+      ? `Attempt ${rec.attempt_no} of your quiz — buying on Amazon is saved to your account.`
+      : 'Tap to buy on Amazon — your choice is saved to your account.';
+    if (retakeBtn) retakeBtn.style.display = 'block';
+  }
+
+  // Open the quiz. Users who already have a recommendation are asked first
+  // whether they want to change it; everyone else goes straight to the questions.
+  function openQuiz() {
+    existing = null;
+    quizContent.classList.add('hidden');
+    result.classList.add('hidden');
+    if (prompt) prompt.classList.add('hidden');
     modal.classList.add('open');
+    auth.apiFetch('quiz')
+      .then(data => {
+        if (data && data.attempts_count >= 1 && data.current) {
+          existing = data.current;
+          if (promptCurrent) promptCurrent.textContent = existing.title;
+          if (prompt) prompt.classList.remove('hidden');
+        } else {
+          showQuestions();
+        }
+      })
+      .catch(() => showQuestions()); // no saved quiz yet / fetch hiccup → ask fresh
+  }
+
+  // Submit all four answers to the backend. The server computes and stores the
+  // recommendation, so the displayed result is always the authoritative one.
+  function submitAnswers() {
+    next.disabled = true;
+    next.textContent = 'Saving…';
+    auth.apiFetch('quiz', { method: 'POST', body: { answers } })
+      .then(rec => {
+        if (!rec || !(rec.products || []).length) throw new Error('No recommendation returned.');
+        showResult(rec);
+      })
+      .catch(err => {
+        next.disabled = false;
+        next.textContent = 'See recommendation';
+        auth.showToast((err && err.message) || 'Could not save your answers — please try again.');
+      });
+  }
+
+  // Fire-and-forget log of the chosen product; never blocks the Amazon tab.
+  function recordAmazonClick(product) {
+    auth.apiFetch('quiz/click', { method: 'POST', body: { key: product.key } })
+      .then(() => auth.showToast('Choice saved to your account'))
+      .catch(() => {});
+  }
+
+  document.querySelectorAll('.quiz-trigger').forEach(button => button.onclick = event => {
+    event.stopPropagation(); // don't flip a story card the button sits inside
+    if (auth && !auth.isSignedIn()) {
+      pendingQuiz = true; // drop them into the quiz right after a successful sign-in
+      auth.openAuthModal();
+      auth.showToast('Sign in first — your quiz results will be saved to your account.');
+      return;
+    }
+    openQuiz();
   });
+
+  // The sign-in modal closes itself on success; open the quiz right after.
+  window.addEventListener('authchange', () => {
+    if (pendingQuiz && auth && auth.isSignedIn()) {
+      pendingQuiz = false;
+      setTimeout(openQuiz, 0);
+    }
+  });
+
+  // A dismissed sign-in modal shouldn't leave a stale "resume quiz" intent.
+  const authModal = document.querySelector('#auth-modal');
+  if (authModal) {
+    authModal.querySelectorAll('.modal-close').forEach(btn => btn.addEventListener('click', () => { pendingQuiz = false; }));
+    authModal.addEventListener('click', e => { if (e.target === authModal) pendingQuiz = false; });
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') pendingQuiz = false; });
+
   modal.querySelectorAll('.modal-close').forEach(button => button.onclick = () => modal.classList.remove('open'));
   modal.onclick = event => { if (event.target === modal) modal.classList.remove('open'); };
   next.onclick = () => {
     if (selected === null) return;
-    if (++current === quiz.length) {
-      document.querySelector('#quiz-content').classList.add('hidden');
-      document.querySelector('#result').classList.remove('hidden');
-    } else render();
+    answers.push(selected);
+    if (++current === quiz.length) submitAnswers();
+    else render();
   };
-}
 
-function setupAuthentication() {
-  const modal = document.querySelector('#auth-modal');
-  if (!modal) return;
-  const start = document.querySelector('#auth-start');
-  const otpScreen = document.querySelector('#otp-screen');
-  const contact = document.querySelector('#auth-contact');
-  const otpInputs = [...document.querySelectorAll('.otp-row input')];
-  const close = () => modal.classList.remove('open');
-  document.querySelectorAll('.auth-trigger').forEach(button => button.onclick = () => modal.classList.add('open'));
-  modal.querySelectorAll('.modal-close').forEach(button => button.onclick = close);
-  modal.onclick = event => { if (event.target === modal) close(); };
-  document.querySelector('#send-otp').onclick = () => {
-    if (!contact.value.trim()) { contact.focus(); return; }
-    document.querySelector('#otp-destination').textContent = contact.value.trim();
-    start.classList.add('hidden'); otpScreen.classList.remove('hidden'); otpInputs[0].focus();
-  };
-  document.querySelector('#otp-back').onclick = () => { otpScreen.classList.add('hidden'); start.classList.remove('hidden'); };
-  otpInputs.forEach((input, index) => input.addEventListener('input', () => { if (input.value && otpInputs[index + 1]) otpInputs[index + 1].focus(); }));
-  document.querySelector('#verify-otp').onclick = () => { localStorage.setItem('neokesan_signedin','true'); window.dispatchEvent(new Event('authchange')); window.location.href = 'account.html'; };
-  document.querySelector('#google-signin').onclick = () => { localStorage.setItem('neokesan_signedin','true'); window.dispatchEvent(new Event('authchange')); window.location.href = 'account.html'; };
-  document.querySelector('#resend-otp').onclick = () => alert('A new demo code has been sent. Connect this button to your OTP provider before launch.');
+  if (promptYes) promptYes.onclick = () => showQuestions();
+  if (promptNo) promptNo.onclick = () => existing && showResult(existing);
+  if (retakeBtn) retakeBtn.onclick = () => openQuiz();
 }
 
 function setupAccount() {
@@ -80,7 +201,6 @@ function setupAccount() {
   if (!profile) return;
   const toast = document.querySelector('#toast');
   const showToast = text => { toast.textContent = text; toast.classList.add('visible'); setTimeout(() => toast.classList.remove('visible'), 2200); };
-  profile.onsubmit = event => { event.preventDefault(); showToast('Profile saved successfully'); };
   const addressForm = document.querySelector('#address-form');
   document.querySelector('#add-address').onclick = () => addressForm.classList.toggle('hidden');
   addressForm.onsubmit = event => {
@@ -159,5 +279,5 @@ function setupStoryCards() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => { orderHomepageSections(); setupHomepageProductDropdown(); setupProductCardLinks(); setupCarousels(); setupQuiz(); setupAuthentication(); setupAccount(); setupStoryCards(); });
+document.addEventListener('DOMContentLoaded', () => { orderHomepageSections(); setupHomepageProductDropdown(); setupProductCardLinks(); setupCarousels(); setupQuiz(); setupAccount(); setupStoryCards(); });
 
