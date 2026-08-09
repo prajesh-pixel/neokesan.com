@@ -545,14 +545,6 @@
   }
 
   function init() {
-    // Unlock the sign-in trigger. shared-layout.js's header template ships the
-    // button with an obsolete .auth-trigger-hidden class (display:none!important)
-    // left over from before the account system was live. shared-layout mounts the
-    // header and sets the inline display from the auth flag first, so dropping the
-    // class here lets that inline value win. auth.js only loads on auth pages, so
-    // non-auth pages keep the button hidden (they have no modal to open).
-    document.querySelectorAll('.auth-trigger.auth-trigger-hidden').forEach(btn => btn.classList.remove('auth-trigger-hidden'));
-
     setupAuthModal();
     setupAccountPage();
 
