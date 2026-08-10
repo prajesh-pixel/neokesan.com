@@ -37,63 +37,7 @@
             <p class="intro">Clean, complete nutrition for each stage of your growing journey.</p>
           </div><a href="#products" class="text-link" style="display:none">View all products </a>
         </div>
-        <div class="product-grid">
-          <article class="product">
-            <div class="product-image product-carousel">
-              <span class="badge">Hydroponic</span>
-              <div class="carousel-slides">
-                <img src="assets/neoponic.jpeg" alt="NeoPonic A &amp; B" class="carousel-slide active" loading="lazy">
-                <img src="assets/neoponic-group.jpeg" alt="NeoPonic set" class="carousel-slide" loading="lazy">
-                <img src="assets/neoponic-a.jpeg" alt="NeoPonic Part A" class="carousel-slide" loading="lazy">
-                <img src="assets/neoponic-b.jpeg" alt="NeoPonic Part B" class="carousel-slide" loading="lazy">
-              </div>
-              <button class="carousel-prev">&#8249;</button>
-              <button class="carousel-next">&#8250;</button>
-            </div>
-            <div class="product-info">
-              <h3>NeoPonic A &amp; B <small>Full Set</small></h3>
-              <p>Complete two-part base nutrients for all hydroponic systems. Includes Part A and Part B.</p>
-              <div class="product-bottom"><b class="price" data-price-key="ponic">&#8377;679</b><a href="https://www.amazon.in/dp/B0HBX6WPTL" target="_blank" rel="noopener" class="add buy-now">Buy on Amazon</a></div>
-            </div>
-          </article>
-          <article class="product">
-            <div class="product-image product-carousel violet">
-              <span class="badge">Blooming</span>
-              <div class="carousel-slides">
-                <img src="assets/neobloom.jpeg" alt="NeoBloom" class="carousel-slide active" loading="lazy">
-                <img src="assets/neobloom-group.jpeg" alt="NeoBloom set" class="carousel-slide" loading="lazy">
-                <img src="assets/neobloom-x1.jpeg" alt="NeoBloom X1" class="carousel-slide" loading="lazy">
-                <img src="assets/neobloom-x2.jpeg" alt="NeoBloom X2" class="carousel-slide" loading="lazy">
-                <img src="assets/neobloom-x3.jpeg" alt="NeoBloom X3" class="carousel-slide" loading="lazy">
-              </div>
-              <button class="carousel-prev">&#8249;</button>
-              <button class="carousel-next">&#8250;</button>
-            </div>
-            <div class="product-info">
-              <h3>NeoBloom X1, X2 &amp; X3 <small>Full Set</small></h3>
-              <p>Staged blooming system with X1 (vegetative), X2 (flowering), and X3 (micro boost) for maximum fruit set.</p>
-              <div class="product-bottom"><b class="price" data-price-key="bloom">&#8377;749</b><a href="https://www.amazon.in/dp/B0HBWZ4G26" target="_blank" rel="noopener" class="add buy-now">Buy on Amazon</a></div>
-            </div>
-          </article>
-          <article class="product">
-            <div class="product-image product-carousel">
-              <span class="badge">Foliar</span>
-              <div class="carousel-slides">
-                <img src="assets/neofolix.jpeg" alt="NeoFolix X1 &amp; X2" class="carousel-slide active" loading="lazy">
-                <img src="assets/neofolix-group.jpeg" alt="NeoFolix set" class="carousel-slide" loading="lazy">
-                <img src="assets/neofolix-x1.jpeg" alt="NeoFolix X1" class="carousel-slide" loading="lazy">
-                <img src="assets/neofolix-x2.jpeg" alt="NeoFolix X2" class="carousel-slide" loading="lazy">
-              </div>
-              <button class="carousel-prev">&#8249;</button>
-              <button class="carousel-next">&#8250;</button>
-            </div>
-            <div class="product-info">
-              <h3>NeoFolix X1 &amp; X2 <small>Full Set</small></h3>
-              <p>Targeted foliar nutrition for stronger leaves and faster recovery. Includes growth and recovery formulas.</p>
-              <div class="product-bottom"><b class="price" data-price-key="folix">&#8377;699</b><a href="https://www.amazon.in/dp/B0HBXB8TQ9" target="_blank" rel="noopener" class="add buy-now">Buy on Amazon</a></div>
-            </div>
-          </article>
-        </div>
+        <div id="product-cards" class="product-grid"></div>
       </div>
     </section>
     <section class="shell">
@@ -348,7 +292,7 @@
         <p>Precision nutrients for modern<br>Indian growers.</p>
       </div>
       <div>
-        <h4>Products</h4><a href="neoponic.html">NeoPonic A &amp; B <small>Full Set</small></a><a href="neobloom.html">NeoBloom X1, X2 &amp; X3 <small>Full Set</small></a><a href="neofolix.html">NeoFolix X1 &amp; X2 <small>Full Set</small></a>
+        <h4>Products</h4><a href="product.html?key=ponic">NeoPonic A &amp; B <small>Full Set</small></a><a href="product.html?key=bloom">NeoBloom X1, X2 &amp; X3 <small>Full Set</small></a><a href="product.html?key=folix">NeoFolix X1 &amp; X2 <small>Full Set</small></a>
       </div>
       <div style="display:none">
         <h4>Learn</h4><a href="index.html#learn">Beginner guides</a><a href="index.html#learn">Video tutorials</a><a href="index.html#learn">Community</a>
@@ -390,10 +334,11 @@
     </div>
   </div>
   <script src="assets/live-prices.js"></script>
-  <script src="shared-layout.js?v=20260810b" defer></script>
+  <script src="catalog.js?v=20260810c" defer></script>
+  <script src="shared-layout.js?v=20260811a" defer></script>
   <script>var v=document.getElementById('heroVideo');v&&setTimeout(function(){v.play()["catch"](function(){})},100);</script>
   <script src="auth.js?v=20260809b" defer></script>
-  <script src="script.js?v=20260809b" defer></script>
+  <script src="script.js?v=20260810d" defer></script>
   <div class="modal" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
     <div class="modal-card auth-card"><button class="modal-close" aria-label="Close sign in">&times;</button>
       <div id="auth-start"><span class="eyebrow auth-eyebrow">Welcome to neoKesan</span>
@@ -403,6 +348,7 @@
         <p class="auth-note hidden" id="google-coming-soon">Google sign-in is coming soon — use email OTP for now.</p>
         <div class="divider"><i></i>or<i></i></div><label class="field-label" for="auth-contact">Email address</label><input class="auth-input" id="auth-contact" type="text" placeholder="you@example.com"><button class="button primary full-button" id="send-otp">Continue with OTP</button>
         <p class="auth-note">By continuing, you agree to our Terms and Privacy Policy.</p>
+        <div class="admin-entry"><a href="admin.html" class="admin-link">Admin dashboard &rarr;</a></div>
       </div>
       <div id="otp-screen" class="hidden"><button class="back-button" id="otp-back">&larr; Back</button><span class="eyebrow auth-eyebrow">Verification</span>
         <h2>Enter your OTP</h2>

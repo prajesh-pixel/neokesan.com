@@ -241,17 +241,78 @@ function setupHomepageProductDropdown() {
   document.addEventListener('click', event => { if (!holder.contains(event.target)) holder.classList.remove('open'); });
 }
 
-function setupProductCardLinks() {
-  const routes = { 'NeoPonic A & B Full Set': 'neoponic.html', 'NeoBloom X1, X2 & X3 Full Set': 'neobloom.html', 'NeoFolix X1 & X2 Full Set': 'neofolix.html', 'NeoPonic A & B': 'neoponic.html', 'NeoBloom X1': 'neobloom.html', 'NeoBloom X2': 'neobloom.html', 'NeoFolix X1 & X2': 'neofolix.html' };
-  document.querySelectorAll('.product').forEach(card => {
-    const title = card.querySelector('h3')?.textContent;
-    if (!routes[title]) return;
+// Escape user-supplied product fields before they touch the DOM. Every piece of
+// catalog markup goes through this — the admin can type anything into a product.
+function esc(str) {
+  return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function renderHomepageCards() {
+  const grid = document.querySelector('#product-cards');
+  const catalog = window.NeoKesanCatalog;
+  if (!grid || !catalog || typeof catalog.snapshot !== 'function') return;
+  // Paint the cached/fallback catalog immediately — no blank flash — then swap
+  // in the fresh list when the API resolves.
+  paintCards(grid, catalog.snapshot());
+  if (typeof catalog.subscribe === 'function') catalog.subscribe(entries => paintCards(grid, entries));
+  if (typeof catalog.load === 'function') catalog.load();
+}
+
+function paintCards(grid, entries) {
+  const items = (Array.isArray(entries) ? entries : []).filter(e => e && e.slug && e.data && typeof e.data === 'object');
+  if (!items.length) return;
+  grid.innerHTML = items.map(cardMarkup).join('');
+  // shared-layout.js's price overlay runs at DOMContentLoaded — before this grid
+  // exists — so the live ₹ price has to be re-applied here after painting.
+  grid.querySelectorAll('[data-price-key]').forEach(el => {
+    const live = window.NEOKESAN_PRICES && window.NEOKESAN_PRICES[el.dataset.priceKey];
+    if (live) el.textContent = '₹' + live;
+  });
+  bindProductCards(grid);
+  setupCarousels();
+}
+
+function cardMarkup(entry) {
+  const d = entry.data;
+  const key = entry.slug;
+  const title = (d.name || entry.name || key) + (d.family ? ' ' + d.family : '');
+  const badge = d.badge || '';
+  const images = (Array.isArray(d.images) && d.images.length) ? d.images : ['assets/logo.png'];
+  const description = d.description || '';
+  const price = d.price || '';
+  const violet = d.accent === '#5546ae' ? ' violet' : '';
+  const buy = entry.amazonUrl
+    ? `<a href="${entry.amazonUrl}" target="_blank" rel="noopener" class="add buy-now">Buy on Amazon</a>`
+    : `<a href="product.html?key=${encodeURIComponent(key)}" class="add buy-now">View product</a>`;
+  return `<article class="product" data-card-key="${key}">` +
+    `<div class="product-image product-carousel${violet}">` +
+      `<span class="badge">${esc(badge)}</span>` +
+      `<div class="carousel-slides">` +
+        images.map((img, i) => `<img src="${img}" alt="${esc(title)}" class="carousel-slide${i === 0 ? ' active' : ''}" loading="lazy">`).join('') +
+      `</div>` +
+      `<button class="carousel-prev">&#8249;</button>` +
+      `<button class="carousel-next">&#8250;</button>` +
+    `</div>` +
+    `<div class="product-info">` +
+      `<h3>${esc(title)} <small>Full Set</small></h3>` +
+      `<p>${esc(description)}</p>` +
+      `<div class="product-bottom"><b class="price" data-price-key="${key}">${price ? '&#8377;' + price : ''}</b>${buy}</div>` +
+    `</div>` +
+  `</article>`;
+}
+
+function bindProductCards(grid) {
+  grid.querySelectorAll('.product').forEach(card => {
+    const key = card.dataset.cardKey;
+    if (!key) return;
     card.style.cursor = 'pointer';
     card.setAttribute('role', 'link');
     card.setAttribute('tabindex', '0');
-    const open = () => window.location.href = routes[title];
-    card.onclick = open;
-    card.onkeydown = event => { if (event.key === 'Enter') open(); };
+    const open = () => window.location.href = 'product.html?key=' + encodeURIComponent(key);
+    // The Buy-on-Amazon <a> and the carousel arrows bubble up to the card — let
+    // them do their own thing instead of navigating the card.
+    card.onclick = e => { if (e.target.closest('a') || e.target.closest('button')) return; open(); };
+    card.onkeydown = e => { if (e.key === 'Enter') open(); };
   });
 }
 
@@ -279,5 +340,7 @@ function setupStoryCards() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => { orderHomepageSections(); setupHomepageProductDropdown(); setupProductCardLinks(); setupCarousels(); setupQuiz(); setupAccount(); setupStoryCards(); });
+document.addEventListener('DOMContentLoaded', () => { orderHomepageSections(); setupHomepageProductDropdown(); renderHomepageCards(); setupQuiz(); setupAccount(); setupStoryCards(); });
+
+console.log('[neoKesan] script v20260810d');
 

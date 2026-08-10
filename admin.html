@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin dashboard | neoKesan</title>
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Aleo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=20260809c">
+  <style>
+    .admin-body{background:var(--mist)}
+    .admin-shell{max-width:1200px;margin:auto;padding:42px 28px 70px}
+    .admin-heading{margin-bottom:26px}
+    .admin-heading .eyebrow{color:var(--green)}
+    .admin-heading h1{font-size:clamp(28px,3.2vw,40px);letter-spacing:-.05em;margin:0 0 8px}
+    .admin-heading p{color:#58776c;margin:0;font-size:14px;line-height:1.6;max-width:560px}
+    .admin-loading{color:#58776c;font-size:14px;padding:60px 0;text-align:center}
+    .admin-gate{background:#fff;border:1px solid var(--line);border-radius:14px;padding:44px 32px;text-align:center;max-width:520px;margin:24px auto}
+    .admin-gate h2{font-size:24px;letter-spacing:-.04em;margin:0 0 8px}
+    .admin-gate p{color:#627f76;font-size:14px;line-height:1.6;margin:0 0 22px}
+    .admin-denied{background:#fff7f7;border:1px solid #f0cccc;border-radius:14px;padding:34px 28px;max-width:640px;margin:24px auto}
+    .admin-denied h2{color:#a33;font-size:22px;margin:0 0 8px}
+    .admin-denied p{color:#7a5a5a;font-size:14px;margin:0;line-height:1.6}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:30px}
+    .stat-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+    .stat-card small{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6a867d;font-weight:700;margin-bottom:6px}
+    .stat-card b{font-size:30px;letter-spacing:-.03em;color:var(--ink)}
+    .stat-card .sub{display:block;font-size:12px;color:#627f76;margin-top:4px}
+    .admin-section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:28px}
+    .admin-section h2{font-size:18px;margin:0 0 14px;letter-spacing:-.02em}
+    .by-product{display:flex;flex-wrap:wrap;gap:10px}
+    .by-product span{background:var(--mist);border:1px solid var(--line);color:var(--ink);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:650}
+    .table-wrap{overflow-x:auto}
+    .admin-table{width:100%;border-collapse:collapse;font-size:13px}
+    .admin-table th{text-align:left;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6a867d;padding:10px 12px;border-bottom:1px solid var(--line)}
+    .admin-table td{padding:12px;border-bottom:1px solid #edf5f1;vertical-align:top}
+    .admin-table tbody tr:last-child td{border-bottom:0}
+    tr.row-expandable{cursor:pointer}
+    tr.row-expandable:hover td{background:#f7fcf9}
+    tr.row-expandable td:first-child{position:relative;padding-right:30px}
+    tr.row-expandable td:first-child::after{content:'▾';position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#6a867d;font-size:11px;transition:transform .2s}
+    tr.row-expandable.open td:first-child::after{transform:translateY(-50%) rotate(-180deg)}
+    tr.detail-row{display:none}
+    tr.detail-row.open{display:table-row}
+    .user-email{color:#58776c;font-size:12px;margin-top:2px}
+    .meta-tags{display:flex;flex-wrap:wrap;gap:6px}
+    .meta-tags span{font-size:11px;background:var(--mist);border:1px solid var(--line);border-radius:16px;padding:3px 9px;color:#3d6b5e}
+    .user-detail{background:#fbfdfb;border:1px solid var(--line);border-radius:10px;padding:18px;margin:6px 0 16px}
+    .detail-block{margin-bottom:18px}
+    .detail-block:last-child{margin-bottom:0}
+    .detail-block h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--green);margin:0 0 10px}
+    .attempt-block{margin-bottom:14px}
+    .attempt-block:last-child{margin-bottom:0}
+    .attempt-head{font-size:12px;color:#627f76;margin:0 0 8px}
+    .q-row{display:flex;gap:10px;font-size:13px;margin:6px 0;align-items:baseline}
+    .q-row .qn{flex:0 0 22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;font-weight:700}
+    .q-row .qt{font-weight:650;color:#3d6b5e;flex:0 0 36%}
+    .q-row .qa{color:var(--ink)}
+    .view-event,.pick-event{font-size:12px;color:#58776c;margin:3px 0}
+    .view-event b,.pick-event b{color:var(--ink);font-weight:650}
+    .empty-state{padding:8px 0;margin:0;color:#6a867d;font-size:13px}
+    .admin-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:26px}
+    .admin-tabs .tab{background:transparent;border:0;border-bottom:2px solid transparent;padding:11px 16px;font:inherit;font-size:14px;font-weight:650;color:#627f76;cursor:pointer;margin-bottom:-1px;border-radius:0}
+    .admin-tabs .tab:hover{color:var(--ink)}
+    .admin-tabs .tab.active{color:var(--ink);border-bottom-color:var(--green)}
+    .products-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+    .products-toolbar h1{font-size:clamp(24px,2.6vw,32px);letter-spacing:-.04em;margin:0 0 6px}
+    .products-toolbar p{color:#58776c;font-size:13px;margin:0;max-width:560px;line-height:1.5}
+    .status-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:12px}
+    .status-badge.st-active{background:#e2f5ed;color:#087d60}
+    .status-badge.st-draft{background:#fdf3e3;color:#9a6700}
+    .status-badge.st-archived{background:#f0efee;color:#6b6a68}
+    .row-actions{white-space:nowrap}
+    .btn-link{background:none;border:0;color:var(--green);font:inherit;font-size:12px;font-weight:650;cursor:pointer;padding:2px 4px;text-decoration:underline}
+    .btn-link:hover{opacity:.8}
+    .btn-link.danger{color:#a33}
+    .btn-link.danger:hover{opacity:.85}
+    .admin-form{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+    .form-section{border-bottom:1px solid var(--line)}
+    .form-section:last-child{border-bottom:0}
+    .form-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;background:#fbfdfb;border:0;padding:16px 22px;cursor:pointer;font:inherit;text-align:left}
+    .form-section-head h3{font-size:16px;margin:0;letter-spacing:-.02em;color:var(--ink)}
+    .form-section-head .hint{font-size:11px;color:#6a867d;text-transform:uppercase;letter-spacing:.05em;font-weight:650}
+    .form-section-head .chev{color:#6a867d;transition:transform .2s}
+    .form-section.closed .form-section-head .chev{transform:rotate(-90deg)}
+    .form-section-body{padding:20px 22px}
+    .form-section.closed .form-section-body{display:none}
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px}
+    .form-grid .field.wide,.field.wide{grid-column:1/-1}
+    .field{display:flex;flex-direction:column;gap:6px;min-width:0}
+    .field>span{font-size:12px;font-weight:650;color:#3d6b5e}
+    .field input,.field select,.field textarea{font:inherit;font-size:13px;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;box-sizing:border-box}
+    .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--green)}
+    .field input[disabled]{background:var(--mist);color:#8aa396;cursor:not-allowed}
+    .field textarea{resize:vertical;line-height:1.5}
+    .field .color-row{display:flex;gap:8px;align-items:center}
+    .field .color-row input[type=color]{width:46px;height:38px;padding:3px;border-radius:8px;border:1px solid var(--line);cursor:pointer;flex:none}
+    .field .color-row input[type=text]{flex:1}
+    .repeat-wrap{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
+    .repeat-row{position:relative;background:#fbfdfb;border:1px solid var(--line);border-radius:10px;padding:14px 40px 14px 14px;display:grid;gap:12px}
+    .repeat-row.inline{grid-template-columns:1fr 1fr auto;gap:8px;padding:10px 40px 10px 10px;align-items:center;background:#fff}
+    .repeat-row.inline input{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);box-sizing:border-box}
+    .repeat-remove{position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:50%;border:0;background:#f0efee;color:#6b6a68;font-size:14px;line-height:1;cursor:pointer;padding:0}
+    .repeat-remove:hover{background:#f0cccc;color:#a33}
+    .repeat-add{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px dashed var(--line);color:var(--green);font:inherit;font-size:12px;font-weight:650;padding:8px 14px;border-radius:8px;cursor:pointer}
+    .repeat-add:hover{border-color:var(--green);background:#f7fcf9}
+    .repeat-add.small{padding:5px 10px;font-size:11px}
+    .guide-tabs{display:flex;gap:6px;margin-bottom:14px}
+    .guide-tabs .gtab{background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 14px;font:inherit;font-size:12px;font-weight:650;color:#627f76;cursor:pointer}
+    .guide-tabs .gtab.active{background:var(--ink);border-color:var(--ink);color:#fff}
+    .guide-panel{display:none}
+    .guide-panel.active{display:block}
+    .check{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#3d6b5e;margin-bottom:14px;cursor:pointer}
+    .check input{margin-top:2px}
+    .hint{font-size:11px;color:#6a867d}
+    .img-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;margin-bottom:14px}
+    .img-thumb{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;position:relative}
+    .img-thumb.hero{border-color:var(--green)}
+    .img-thumb img{width:100%;height:86px;object-fit:cover;display:block;background:var(--mist)}
+    .img-thumb .hero-tag{position:absolute;top:4px;left:4px;background:var(--green);color:#fff;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:6px}
+    .img-meta{padding:6px;display:flex;gap:4px;justify-content:center}
+    .img-meta button{background:none;border:0;font:inherit;font-size:10px;font-weight:650;cursor:pointer;padding:3px 5px;border-radius:5px}
+    .img-hero{color:var(--green)}
+    .img-remove{color:#a33}
+    .img-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .form-actions{display:flex;gap:10px;justify-content:flex-end;padding:16px 22px;border-top:1px solid var(--line);background:#fbfdfb}
+    .form-actions.inline{justify-content:flex-start;border-top:0;padding:14px 0 0}
+    .button:disabled{opacity:.6;cursor:not-allowed}
+    .button.danger{background:#a33;border-color:#a33}
+    .button.danger:hover{background:#8b2b2b;border-color:#8b2b2b}
+    .confirm-box{background:#fff7f7;border:1px solid #f0cccc;border-radius:10px;padding:14px;margin:12px 0}
+    .confirm-box input{width:100%;font:inherit;font-size:14px;border:1px solid #e5c7c7;border-radius:8px;padding:9px 11px;box-sizing:border-box;margin-top:8px;color:var(--ink)}
+    .confirm-box input:focus{outline:none;border-color:#a33}
+    .note-banner{background:#fdf3e3;border:1px solid #ecd9b8;color:#7a5c1e;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px;line-height:1.5}
+    .note-banner b{color:#9a6700}
+    .danger-note{color:#a33}
+    @media(max-width:760px){.admin-shell{padding:28px 20px 60px}.q-row{flex-direction:column;gap:3px}.q-row .qt{flex:none}.form-grid{grid-template-columns:1fr}.repeat-row.inline{grid-template-columns:1fr}.img-list{grid-template-columns:repeat(auto-fill,minmax(90px,1fr))}}
+  </style>
+</head>
+<body class="admin-body">
+  <div data-site-header></div>
+  <main class="admin-shell" id="admin-dashboard"><div class="admin-loading">Loading…</div></main>
+  <div data-site-footer></div>
+
+  <div class="modal" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="modal-card auth-card"><button class="modal-close" aria-label="Close sign in">&times;</button>
+      <div id="auth-start"><span class="eyebrow auth-eyebrow">Welcome to neoKesan</span>
+        <h2 id="auth-title">Grow with your account</h2>
+        <p>Sign in or create an account to save your garden profile, addresses and orders.</p>
+        <div class="google-button-wrap" id="google-button-wrap"><button class="google-button" id="google-signin"><span>G</span> Continue with Google</button></div>
+        <p class="auth-note hidden" id="google-coming-soon">Google sign-in is coming soon — use email OTP for now.</p>
+        <div class="divider"><i></i>or<i></i></div><label class="field-label" for="auth-contact">Email address</label><input class="auth-input" id="auth-contact" type="text" placeholder="you@example.com"><button class="button primary full-button" id="send-otp">Continue with OTP</button>
+        <p class="auth-note">By continuing, you agree to our Terms and Privacy Policy.</p>
+        <div class="admin-entry"><a href="admin.html" class="admin-link">Admin dashboard &rarr;</a></div>
+      </div>
+      <div id="otp-screen" class="hidden"><button class="back-button" id="otp-back">&larr; Back</button><span class="eyebrow auth-eyebrow">Verification</span>
+        <h2>Enter your OTP</h2>
+        <p>We sent a 6-digit code to <b id="otp-destination"></b>.</p>
+        <div class="otp-row" id="otp-row"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"></div><button class="button primary full-button" id="verify-otp">Verify and continue</button>
+        <div class="otp-timer-row" id="otp-timer-row">Code expires in <b id="otp-timer">10:00</b></div><button class="text-button" id="resend-otp">Resend code</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="catalog.js?v=20260810c" defer></script>
+  <script src="shared-layout.js?v=20260811a" defer></script>
+  <script src="auth.js?v=20260809b" defer></script>
+  <script src="admin.js?v=20260810e" defer></script>
+</body>
+</html>
