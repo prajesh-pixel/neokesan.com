@@ -137,6 +137,13 @@
     .note-banner{background:#fdf3e3;border:1px solid #ecd9b8;color:#7a5c1e;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px;line-height:1.5}
     .note-banner b{color:#9a6700}
     .danger-note{color:#a33}
+    .qr-thumb{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px;display:inline-block;line-height:0}
+    .qr-thumb svg{display:block;width:72px;height:72px}
+    .qr-target{min-width:230px}
+    .qr-link{font-size:12px;color:#3d6b5e;text-decoration:none;word-break:break-all}
+    .qr-link:hover{text-decoration:underline}
+    .qr-actions{white-space:nowrap}
+    .status-badge.st-retired{background:#f0efee;color:#6b6a68}
     @media(max-width:760px){.admin-shell{padding:28px 20px 60px}.q-row{flex-direction:column;gap:3px}.q-row .qt{flex:none}.form-grid{grid-template-columns:1fr}.repeat-row.inline{grid-template-columns:1fr}.img-list{grid-template-columns:repeat(auto-fill,minmax(90px,1fr))}}
   </style>
 </head>
@@ -168,6 +175,10 @@
   <script src="catalog.js?v=20260810c" defer></script>
   <script src="shared-layout.js?v=20260915a" defer></script>
   <script src="auth.js?v=20260809b" defer></script>
-  <script src="admin.js?v=20260810e" defer></script>
+  <!-- QR previews and downloads are rendered in-browser from the same encoder the
+       sync script uses, so a new product can be printed before any sync runs. -->
+  <script src="assets/qrcode.js?v=20260916a" defer></script>
+  <script src="assets/qr-render.js?v=20260916a" defer></script>
+  <script src="admin.js?v=20260916a" defer></script>
 </body>
 </html>

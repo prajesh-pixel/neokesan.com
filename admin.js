@@ -55,8 +55,9 @@
   function labelFor(key) { return labels[key] || key; }
 
   /* ----------------------- app state ----------------------- */
-  let tab = 'analytics';       // 'analytics' | 'products'
+  let tab = 'analytics';       // 'analytics' | 'products' | 'qr'
   let products = [];           // admin product list (admin payload shape)
+  let qrItems = [];            // admin QR list (admin/qr payload shape)
   let editing = null;          // product being edited (null = creating)
   let imagesState = [];        // current images array for the open form
   let contentDelegationBound = null; // element the delegated handler is attached to
@@ -89,6 +90,7 @@
     return '<div class="admin-tabs">' +
       '<button type="button" class="tab' + (active === 'analytics' ? ' active' : '') + '" data-tab="analytics">Analytics</button>' +
       '<button type="button" class="tab' + (active === 'products' ? ' active' : '') + '" data-tab="products">Products</button>' +
+      '<button type="button" class="tab' + (active === 'qr' ? ' active' : '') + '" data-tab="qr">QR codes</button>' +
       '</div><div id="tab-content"><div class="admin-loading">Loading…</div></div>';
   }
 
@@ -106,6 +108,7 @@
     const content = document.getElementById('tab-content');
     if (!content) return;
     if (tab === 'products') renderProductsTab();
+    else if (tab === 'qr') renderQrTab();
     else renderAnalyticsTab();
   }
 
@@ -369,6 +372,181 @@
       const p = findProduct(btn.dataset.del);
       if (p) openDeleteConfirm(p);
     });
+  }
+
+  /* -------------------------- qr tab: list -------------------------- */
+
+  function qrSvgFor(link, name) {
+    // The XML prolog is only legal at the top of a standalone document; it must
+    // go before the SVG is inlined into the page as a preview.
+    return window.NeoKesanQR.buildQrSvg(link, { label: name + ' — ' + link })
+      .replace(/^<\?xml[^>]*\?>\s*/, '');
+  }
+
+  /* Mirrors Neokesan_QR::sanitize_target() so an obviously bad destination is
+     caught before the round trip. The server remains the authority — this only
+     saves a request. */
+  function qrTargetProblem(value) {
+    const v = String(value == null ? '' : value).trim();
+    if (!v) return 'Enter a destination.';
+    if (/^[a-z][a-z0-9+.-]*:/i.test(v)) {
+      return /^https:\/\/(www\.|shop\.)?neokesan\.com(\/|$)/i.test(v)
+        ? ''
+        : 'Only https:// links on neokesan.com are allowed.';
+    }
+    if (v.indexOf('//') === 0) return 'Enter a path like /product.html, or a full neokesan.com link.';
+    if (v.charAt(0) !== '/') return 'Destination must start with / or be a full neokesan.com link.';
+    return '';
+  }
+
+  function renderQrTab() {
+    const content = document.getElementById('tab-content');
+    if (!content) return;
+    content.innerHTML = '<div class="admin-loading">Loading QR codes…</div>';
+    window.NeoKesanAuth.apiFetch('admin/qr')
+      .then(data => {
+        const list = data && Array.isArray(data.items) ? data.items : null;
+        if (!list) throw new Error('Unexpected QR list response.');
+        qrItems = list;
+        // Only the DOM write is skipped if the user switched tabs mid-fetch.
+        if (tab !== 'qr' || !document.getElementById('tab-content')) return;
+        content.innerHTML = qrListHtml(list);
+        bindQrList();
+      })
+      .catch(err => {
+        if (tab !== 'qr' || !document.getElementById('tab-content')) return;
+        if (err && err.status === 403) { deniedView(); return; }
+        if (err && err.status === 401) { return; }
+        const msg = err.message || 'Couldn\'t load QR codes.';
+        window.NeoKesanAuth.showToast(msg);
+        content.innerHTML =
+          '<div class="admin-denied"><h2>Couldn\'t load QR codes</h2><p>' + esc(msg) + '</p></div>';
+      });
+  }
+
+  function qrListHtml(list) {
+    const rows = list.map(q => {
+      const link = window.NeoKesanQR.qrLink(q.slug);
+      const status = q.status || 'active';
+      const pstatus = q.product_status || 'active';
+      // A retired code, or one whose product is gone, resolves to the homepage
+      // rather than a dead page — say so, it is the whole point of the tab.
+      let note = '';
+      if (pstatus === 'deleted') note = 'product deleted — scans go to the homepage';
+      else if (pstatus !== 'active') note = 'product is ' + pstatus;
+      else if (status !== 'active') note = 'retired — scans go to the homepage';
+      return '<tr>' +
+        '<td><strong>' + esc(q.name || q.key || q.slug) + '</strong>' +
+        '<div class="user-email">' + esc(q.key) + (note ? ' · ' + esc(note) : '') + '</div></td>' +
+        '<td><a class="qr-link" href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(link) + '</a></td>' +
+        '<td><div class="field qr-target"><input type="text" spellcheck="false" value="' +
+          esc(q.target || '') + '" data-target="' + esc(q.slug) + '"></div></td>' +
+        '<td><span class="status-badge st-' + esc(status) + '">' + esc(status) + '</span></td>' +
+        '<td><span class="qr-thumb">' + qrSvgFor(link, q.name || q.slug) + '</span></td>' +
+        '<td class="row-actions qr-actions">' +
+        '<button type="button" class="btn-link" data-save="' + esc(q.slug) + '">Save</button> ' +
+        '<button type="button" class="btn-link" data-svg="' + esc(q.slug) + '">SVG</button> ' +
+        '<button type="button" class="btn-link" data-png="' + esc(q.slug) + '">PNG</button>' +
+        '</td>' +
+        '</tr>';
+    }).join('');
+
+    return '<div class="products-toolbar">' +
+      '<div><span class="eyebrow" style="color:var(--green)">neoKesan packaging</span>' +
+      '<h1>QR codes</h1>' +
+      '<p>Each product gets a permanent link that can never change once it is printed on a box. Change where it points below and the printed code keeps working. Downloads are generated here, so you can print as soon as a product exists. Changes go live on neokesan.com within about 7 hours.</p></div>' +
+      '</div>' +
+      '<div class="admin-section">' +
+      '<div class="table-wrap"><table class="admin-table">' +
+      '<thead><tr><th>Product</th><th>Printed link</th><th>Destination</th><th>Status</th><th>Preview</th><th>Download</th></tr></thead>' +
+      '<tbody>' + (list.length ? rows : '<tr><td colspan="6"><p class="empty-state">No QR codes yet — one appears here automatically for every product you add.</p></td></tr>') + '</tbody>' +
+      '</table></div></div>';
+  }
+
+  function bindQrList() {
+    const el = document.getElementById('tab-content');
+    if (!el) return;
+    el.querySelectorAll('[data-save]').forEach(btn => btn.onclick = () => {
+      const slug = btn.dataset.save;
+      const input = el.querySelector('input[data-target="' + slug + '"]');
+      if (!input) return;
+      const problem = qrTargetProblem(input.value);
+      if (problem) { window.NeoKesanAuth.showToast(problem); input.focus(); return; }
+      btn.disabled = true;
+      window.NeoKesanAuth.apiFetch('admin/qr/' + encodeURIComponent(slug), {
+        method: 'PUT',
+        body: { target: input.value.trim() }
+      }).then(() => {
+        window.NeoKesanAuth.showToast('Destination saved. The printed code is unchanged.');
+        renderQrTab();
+      }).catch(err => {
+        btn.disabled = false;
+        if (err && err.status === 401) return; // session already torn down
+        window.NeoKesanAuth.showToast((err && err.message) || 'Couldn\'t save. Please try again.');
+      });
+    });
+    el.querySelectorAll('[data-svg]').forEach(btn => btn.onclick = () => {
+      const q = findQr(btn.dataset.svg);
+      if (!q) return;
+      const link = window.NeoKesanQR.qrLink(q.slug);
+      downloadBlob(q.slug + '-qr.svg', 'image/svg+xml',
+        window.NeoKesanQR.buildQrSvg(link, { label: (q.name || q.slug) + ' — ' + link }));
+    });
+    el.querySelectorAll('[data-png]').forEach(btn => btn.onclick = () => {
+      const q = findQr(btn.dataset.png);
+      if (q) downloadQrPng(q);
+    });
+  }
+
+  function findQr(slug) {
+    for (let i = 0; i < qrItems.length; i++) if (qrItems[i].slug === slug) return qrItems[i];
+    return null;
+  }
+
+  function downloadBlob(filename, type, data) {
+    const url = URL.createObjectURL(new Blob([data], { type: type }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  /* The bundled library can only emit a GIF, and its canvas renderer hard-codes
+     the colours and draws no quiet zone — so the PNG is rasterised here from the
+     same module grid the SVG is built from. Print from the SVG; this is for
+     places that only accept a bitmap. */
+  function downloadQrPng(q) {
+    const link = window.NeoKesanQR.qrLink(q.slug);
+    const m = window.NeoKesanQR.buildMatrix(link);
+    const px = 16; // module size in the exported raster
+    const dim = m.size * px;
+    const canvas = document.createElement('canvas');
+    canvas.width = dim;
+    canvas.height = dim;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, dim, dim);
+    ctx.fillStyle = '#000000';
+    for (let r = 0; r < m.count; r++) {
+      for (let c = 0; c < m.count; c++) {
+        if (!m.rows[r][c]) continue;
+        ctx.fillRect((c + m.margin) * px, (r + m.margin) * px, px, px);
+      }
+    }
+    canvas.toBlob(blob => {
+      if (!blob) { window.NeoKesanAuth.showToast('Couldn\'t create the PNG.'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = q.slug + '-qr.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
   }
 
   function findProduct(key) {

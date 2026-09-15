@@ -1,0 +1,43 @@
+name: Sync QR redirect pages
+on:
+  schedule:
+    - cron: '23 */6 * * *'   # every 6 h at :23 (off-minute, and clear of the price sync at :17)
+  workflow_dispatch:         # manual trigger from the Actions tab
+permissions:
+  contents: write
+concurrency:
+  # Deliberately the same group as the price sync: both workflows commit to
+  # master, and a push that lands while the other is mid-push is rejected as
+  # non-fast-forward. Sharing a group serialises them instead.
+  group: site-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pull the QR registry from WordPress
+        # No secrets. The registry endpoint is public and read-only, and exposes
+        # only product keys and the URLs they already resolve to.
+        run: node scripts/sync-qr.js
+      - name: Commit QR changes
+        run: |
+          git config user.name "neokesan-qr-bot"
+          git config user.email "qr-bot@neokesan.com"
+          # q/ does not exist until the first product is published, and `git add`
+          # exits 128 on a pathspec matching nothing — which `bash -e` would turn
+          # into a failed run on a legitimately empty registry.
+          if [ -d q ]; then git add -A -- q; fi
+          if git diff --cached --quiet; then
+            echo "No QR changes"
+          else
+            git commit -m "Sync QR redirect pages from WordPress"
+            # Belt-and-braces against the shared concurrency group ever failing
+            # to serialise: rebase onto whatever landed in the meantime rather
+            # than being rejected.
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+            git push
+          fi

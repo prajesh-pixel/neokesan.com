@@ -6,7 +6,9 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: price-sync
+  # Shared with the QR sync — both commit to master, so they take turns rather
+  # than racing each other's push.
+  group: site-sync
   cancel-in-progress: false
 jobs:
   sync:

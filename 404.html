@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Page not found | neoKesan</title>
+  <link rel="icon" type="image/png" href="/assets/logo.png">
+  <!-- Deliberately self-contained: no /styles.css, no shared-layout.js, and no
+       Liquid tags. This page has to render correctly for a mistyped URL and for
+       a printed QR code whose slug was retired, neither of which can be
+       predicted — so it depends on nothing that could be renamed or cache-bumped. -->
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Aleo,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#f7faf9;color:#043b31}
+    .notfound{min-height:100vh;display:grid;place-items:center;padding:24px}
+    .notfound-card{max-width:460px;width:100%;text-align:center;background:#fff;border:1px solid #d9e9e2;border-radius:14px;padding:44px 32px;box-shadow:0 18px 40px #00000008}
+    .notfound-code{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#0d7a5f;margin:0 0 10px}
+    .notfound-card h1{font-size:26px;letter-spacing:-.04em;margin:0 0 10px}
+    .notfound-card p{font-size:14px;line-height:1.6;color:#617d74;margin:0 0 24px}
+    .notfound-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .notfound-actions a{display:inline-block;text-decoration:none;font-weight:600;font-size:15px;padding:12px 26px;border-radius:999px}
+    .notfound-primary{background:#0d7a5f;color:#fff}
+    .notfound-secondary{background:#fff;color:#0d7a5f;border:1px solid #d9e9e2}
+  </style>
+</head>
+<body>
+  <main class="notfound">
+    <div class="notfound-card">
+      <p class="notfound-code">404</p>
+      <h1>We couldn&rsquo;t find that page</h1>
+      <p>The link may be mistyped, or the page may have moved. If you scanned a code on neoKesan packaging, the code is still valid &mdash; try scanning again in better light, or use the button below.</p>
+      <div class="notfound-actions">
+        <a class="notfound-primary" href="/">Go to neoKesan</a>
+        <a class="notfound-secondary" href="/index.html#products">Browse products</a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
