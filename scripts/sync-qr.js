@@ -11,25 +11,39 @@
  *   q/<slug>/qr.svg       the print-ready vector for that code
  *   q/registry.json       committed snapshot; the backup if WordPress is lost
  *
+ * It reads two endpoints, both public:
+ *
+ *   /qr-registry   which codes exist, and where each one points
+ *   /products      the accent colour each code is inked in
+ *
+ * The second one is why styling needs no plugin change: it is already
+ * `__return_true` and already carries `data.accent`. It is fetched separately
+ * from the registry because the QR admin payload carries no colour at all.
+ *
  * WordPress is the source of truth. This script is a one-way projection of it,
  * so the entire failure philosophy is: a bad run must never destroy good
  * committed output. On any doubt it exits non-zero and writes nothing, which
  * leaves the previous good pages live.
  *
  * What that means concretely — it aborts, before touching the filesystem, if:
- *   - the fetch fails (WordPress down, DNS, 5xx, timeout)
- *   - the response is not the expected {ok, count, items} envelope
+ *   - either fetch fails (WordPress down, DNS, 5xx, timeout)
+ *   - the registry is not the expected {ok, count, items} envelope
  *   - ok is not true, or count disagrees with items.length
+ *   - the products response is neither an array nor an {items[]} envelope
  *   - any slug is not a safe path segment
  *   - any target would break out of an HTML attribute or a JS string
  *   - the registry came back empty while q/registry.json still lists codes
  *   - the run would delete more than half the existing pages
  *
- * The last two are the important ones. An empty or truncated registry is
- * indistinguishable from "every product was deleted", and the naive reaction —
- * prune everything not in the list — would delete the redirect page behind
- * every code already printed on packaging. So emptiness is treated as an error
- * rather than as data.
+ * The products fetch aborts too, and that is deliberate rather than incidental:
+ * with no accents every code would render black, which would rewrite every
+ * qr.svg with something that looks perfectly valid and would be printed.
+ *
+ * The last two of the registry checks are the important ones. An empty or
+ * truncated registry is indistinguishable from "every product was deleted", and
+ * the naive reaction — prune everything not in the list — would delete the
+ * redirect page behind every code already printed on packaging. So emptiness is
+ * treated as an error rather than as data.
  *
  * To override the prune valve deliberately (you really did delete most of the
  * catalog): NEOKESAN_QR_FORCE=1 node scripts/sync-qr.js
@@ -39,6 +53,7 @@ const path = require('path');
 const NeoKesanQR = require('../assets/qr-render.js');
 
 const REGISTRY_URL = 'https://shop.neokesan.com/wp-json/neokesan/v1/qr-registry';
+const PRODUCTS_URL = 'https://shop.neokesan.com/wp-json/neokesan/v1/products';
 const ROOT = path.join(__dirname, '..');
 const QR_DIR = path.join(ROOT, 'q');
 const SNAPSHOT = path.join(QR_DIR, 'registry.json');
@@ -69,13 +84,13 @@ function html(s) {
  * Fetch
  * ---------------------------------------------------------------------- */
 
-async function fetchRegistry() {
-  // The cache-buster is load-bearing, not defensive. This endpoint is fetched
+async function fetchJson(url, what) {
+  // The cache-buster is load-bearing, not defensive. These endpoints are fetched
   // with no credentials, and Hostinger's CDN caches unauthenticated REST GETs
   // for up to 7 days — admin.js only appends its own cb= when a token is
-  // present, so a scheduled run would otherwise read a week-old registry and
+  // present, so a scheduled run would otherwise read a week-old response and
   // silently republish stale targets.
-  const url = REGISTRY_URL + '?cb=' + Date.now();
+  const full = url + '?cb=' + Date.now();
   const headers = {
     'Accept': 'application/json',
     'Cache-Control': 'no-cache',
@@ -85,25 +100,23 @@ async function fetchRegistry() {
   let lastErr;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const res = await fetch(url, { headers });
+      const res = await fetch(full, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await res.text();
-      let data;
       try {
-        data = JSON.parse(body);
+        return JSON.parse(body);
       } catch (_) {
         throw new Error(`response was not JSON (${body.slice(0, 120)}...)`);
       }
-      return data;
     } catch (err) {
       lastErr = err;
-      console.warn(`  attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+      console.warn(`  ${what}: attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
       if (attempt < MAX_RETRIES) {
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       }
     }
   }
-  throw lastErr;
+  throw new Error(`${what}: ${lastErr.message}`);
 }
 
 function validateRegistry(data) {
@@ -150,6 +163,37 @@ function validateRegistry(data) {
   // MySQL returned rows in a different order this time.
   items.sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
   return items;
+}
+
+/**
+ * Product slug -> accent colour, taken from the public products endpoint.
+ *
+ * A product with no colour — or one we cannot parse — is simply absent from the
+ * map, and the caller skips its code and says so. Substituting black would
+ * quietly publish a code that does not match the packaging it is printed on,
+ * which is worse than not publishing one at all.
+ *
+ * @param {*} data Parsed response body.
+ * @return {Map<string, string>} Slug -> `#rrggbb`.
+ */
+function accentsBySlug(data) {
+  const rows = Array.isArray(data) ? data
+    : (data && typeof data === 'object' && Array.isArray(data.items)) ? data.items
+    : null;
+  if (!rows) {
+    throw new Error('products response is neither an array nor an {items[]} envelope');
+  }
+
+  const map = new Map();
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const slug = String(row.slug == null ? '' : row.slug);
+    const accent = row.data && typeof row.data === 'object' ? row.data.accent : '';
+    if (slug && typeof accent === 'string' && NeoKesanQR.isHexColor(accent)) {
+      map.set(slug, accent.trim());
+    }
+  }
+  return map;
 }
 
 /* -------------------------------------------------------------------------
@@ -215,6 +259,10 @@ function snapshotJson(items) {
       name: it.name,
       target: it.target,
       url: NeoKesanQR.qrLink(it.slug),
+      // Recorded so the codes are reproducible from this file alone. If
+      // WordPress is ever lost, this is what lets the SVGs be rebuilt in the
+      // right colours rather than black.
+      accent: it.accent || null,
     })),
   };
   return JSON.stringify(payload, null, 2) + '\n';
@@ -258,9 +306,15 @@ function writeFileIfChanged(file, contents) {
 
 async function main() {
   console.log(`Fetching ${REGISTRY_URL} ...`);
-  const raw = await fetchRegistry();
-  const items = validateRegistry(raw);
+  const items = validateRegistry(await fetchJson(REGISTRY_URL, 'registry'));
   console.log(`Registry OK: ${items.length} code(s).`);
+
+  console.log(`Fetching ${PRODUCTS_URL} ...`);
+  const accents = accentsBySlug(await fetchJson(PRODUCTS_URL, 'products'));
+  console.log(`Products OK: ${accents.size} coloured product(s).`);
+  // `key` is the product slug and is what carries the colour; the fallback
+  // covers a registry row that predates the field, where slug is the same value.
+  for (const item of items) item.accent = accents.get(item.key || item.slug) || null;
 
   if (items.length === 0) {
     // A genuinely empty catalog is possible, but it is far more likely to mean
@@ -291,13 +345,49 @@ async function main() {
 
   let pages = 0;
   let svgs = 0;
+  const skipped = [];
   for (const item of items) {
     const dir = path.join(QR_DIR, item.slug);
+
+    // The redirect page is the permanent contract, so it is always written —
+    // even for a slug we cannot ink. The code on the box points here regardless
+    // of what colour it was printed in.
     if (writeFileIfChanged(path.join(dir, 'index.html'), redirectPage(item))) pages++;
+
+    if (!item.accent) {
+      // Deliberately not a black fallback. A black code would look like a
+      // perfectly good result and would be printed, and it would not match the
+      // packaging it is stuck to. Any qr.svg already there is left alone.
+      skipped.push(item.slug);
+      continue;
+    }
+
+    const ink = NeoKesanQR.resolveInk(item.accent);
+    if (ink.adjusted) {
+      console.warn(
+        `  q/${item.slug}: accent ${item.accent} is below the ${NeoKesanQR.MIN_CONTRAST}:1 floor ` +
+        `against white — inked as ${ink.color} (${ink.contrast.toFixed(2)}:1) instead.`
+      );
+    } else if (ink.warn) {
+      console.warn(
+        `  q/${item.slug}: accent ${item.accent} is only ${ink.contrast.toFixed(2)}:1 against white. ` +
+        'Legible, but worth a scan test on the real print.'
+      );
+    }
+
     const svg = NeoKesanQR.buildQrSvg(NeoKesanQR.qrLink(item.slug), {
+      accent: item.accent,
       label: `${item.name} — ${NeoKesanQR.qrLink(item.slug)}`,
     });
     if (writeFileIfChanged(path.join(dir, 'qr.svg'), svg)) svgs++;
+  }
+
+  for (const slug of skipped) {
+    console.warn(
+      `SKIPPED q/${slug}/qr.svg — product "${slug}" has no accent colour set. ` +
+      'Its redirect page is live; set an accent in the admin panel and the next sync will ' +
+      'generate the code.'
+    );
   }
 
   if (writeFileIfChanged(SNAPSHOT, snapshotJson(items))) {
@@ -310,7 +400,12 @@ async function main() {
   }
 
   console.log(`\n${items.length} code(s): ${pages} page(s) and ${svgs} SVG(s) changed.`);
-  if (pages === 0 && svgs === 0 && stale.length === 0) {
+  if (skipped.length > 0) {
+    // Named separately from the counts above, because "0 SVG(s) changed" on its
+    // own reads as success — and for these slugs it is not.
+    console.log(`${skipped.length} code(s) skipped for want of an accent: ${skipped.join(', ')}.`);
+  }
+  if (pages === 0 && svgs === 0 && stale.length === 0 && skipped.length === 0) {
     console.log('Already up to date.');
   }
 }

@@ -6,21 +6,24 @@
       "key": "bloom",
       "name": "NeoBloom",
       "target": "/product.html?key=bloom",
-      "url": "https://neokesan.com/q/bloom/"
+      "url": "https://neokesan.com/q/bloom/",
+      "accent": "#5546ae"
     },
     {
       "slug": "folix",
       "key": "folix",
       "name": "NeoFolix",
       "target": "/product.html?key=folix",
-      "url": "https://neokesan.com/q/folix/"
+      "url": "https://neokesan.com/q/folix/",
+      "accent": "#1b9272"
     },
     {
       "slug": "ponic",
       "key": "ponic",
       "name": "NeoPonic",
       "target": "/product.html?key=ponic",
-      "url": "https://neokesan.com/q/ponic/"
+      "url": "https://neokesan.com/q/ponic/",
+      "accent": "#087d60"
     }
   ]
 }

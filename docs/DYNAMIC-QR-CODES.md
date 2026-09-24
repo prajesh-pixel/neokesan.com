@@ -141,11 +141,12 @@ carries their code.
 | `wp-plugin/neokesan-account-api/includes/class-qr.php` | The plugin class — table, slug logic, REST routes |
 | `assets/qrcode.js` | Vendored MIT QR encoder (qrcode-generator, Kazuhiko Arase) — unmodified |
 | `assets/qr-render.js` | Our renderer. One file, used by browser **and** Node |
+| `assets/qr-logo.js` | The neoKesan wordmark as a base64 data URI, embedded in every code |
 | `scripts/sync-qr.js` | Pulls the registry, writes `q/`, commits nothing itself |
 | `.github/workflows/sync-qr.yml` | The ~6 h cron that runs the script and commits |
 | `q/<slug>/index.html` | Generated redirect page — **this is what a printed code opens** |
 | `q/<slug>/qr.svg` | Generated print-ready vector — **print from this, never the PNG** |
-| `q/registry.json` | Committed snapshot. The backup if WordPress is ever lost |
+| `q/registry.json` | Committed snapshot, incl. each code's accent. The backup if WordPress is ever lost |
 | `admin.html` / `admin.js` | The **QR codes** tab — preview, edit destination, download |
 | `404.html` | Branded page for unknown/mistyped slugs |
 
@@ -164,6 +165,129 @@ lives in JavaScript: one MIT-licensed file, loaded unchanged by both the browser
 
 Because both paths call the same `buildQrSvg()`, the code previewed in the admin panel is
 **byte-identical** to the code committed and printed. There is no second implementation to drift.
+
+### Code styling — accent colour, wordmark, contrast guard
+
+Every code is square-module, inked in its product's own `accent`, on the white plate, with the
+neoKesan wordmark knocked into the centre.
+
+#### Where the look came from
+
+`ref/qr-code-styling.png` — a sample produced with
+[qr-code-styling](https://github.com/kozakdenys/qr-code-styling) — was measured rather than
+eyeballed (`PIL`/NumPy), because "match this" needs numbers:
+
+| Property | Measured value |
+|---|---|
+| Size | 300 × 300, module pitch exactly 10.00 px |
+| Module count | **29** (QR version 3) |
+| Ink bounding box | 290 × 290 at offset 5 — i.e. the quiet zone is only 0.5 module |
+| Body dots | square, exact multiples of the module area → zero rounding loss |
+| Corner squares / corner dots | square |
+| Logo | centred, brand green, knockout 9 × 9 modules |
+
+So "the styling" is a small, well-understood delta on the run-length emitter already in
+`qr-render.js` — square modules, one colour, a knockout, an `<image>`. It is **not** a different
+rendering engine.
+
+#### Why the library is not vendored
+
+`qr-code-styling` was evaluated and rejected on three concrete grounds:
+
+1. **CI has no install step.** `.github/workflows/sync-qr.yml` runs bare `node scripts/sync-qr.js`.
+   There is no `package.json` and no `node_modules`. The library needs `jsdom` (~5 MB) to run in
+   Node at all, since it reaches for `window` / `XMLSerializer`.
+2. **Two renderers means drift.** `admin.html` has no bundler, so the browser would need a
+   separately vendored copy — and then the preview could silently disagree with the printed file.
+   The whole point of the UMD single-file design above is that it cannot.
+3. **Its output does not survive print rasterisers.** It emits `clip-path="url('#id')"` — single
+   quotes inside `url()` — which resvg and several print RIPs refuse to resolve, and it emits every
+   dot twice (once inside `<clipPath>`, once in the body), roughly doubling the file.
+
+We match the reference's *output*. We do not need its engine.
+
+#### The wordmark
+
+`assets/qr-logo.js` exports `{ dataUri, width, height }`. It is a data URI, not a file path,
+because a printed code has to be self-contained: the SVG gets rasterised by print shops, dropped
+into label tools and opened offline, and an external `/assets/...` reference breaks in all three.
+Inlining also keeps the admin preview byte-identical to the committed `qr.svg`, and keeps the
+admin panel's canvas PNG export untainted (see §8).
+
+It is derived from `ref/neo_logo.png` (1080 × 1080, but 86% of that is transparent padding — the
+ink is only ~1017 × 583), cropped to the ink plus an 8 px pad, downscaled to ~412 × 239 — still
+about 2× what 600 dpi needs for an 8.8 mm print — palette-quantised and stripped of metadata.
+~3 KB of PNG becomes ~4 KB of base64, against a 68 KB source.
+
+The wordmark itself is **never tinted**. It stays brand green in every code, as in the reference.
+
+#### The knockout rule
+
+Derived, never hard-coded, so it adapts if a future product's URL pushes the code to a larger QR
+version:
+
+```
+logoW = round(n × 9/33)            // the reference's 9-of-29 proportion, at our 33 modules
+logoH = logoW / aspect             // aspect from the logo asset, 1.7204
+block = whole modules, expanded symmetrically about centre = n/2
+```
+
+For n = 33 that is a **9 × 7** block — 63 modules, **5.8% of the grid** — comfortably inside
+level H's 30% recovery budget. The slack left over vertically becomes the white ring between the
+wordmark and the nearest dots.
+
+The 9-of-33 figure is not arbitrary. A measured decode sweep (14 builds, OpenCV) found the cliff:
+a logo up to ~9.6 modules wide still decodes; ~12 modules fails. 9 sits on the safe side.
+`imageOptions.margin` — the library's knob for this — gives no headroom at all; the knockout size
+is the only thing that matters.
+
+#### The contrast guard
+
+This is what makes "add a product and its code is generated for you" safe. A pale accent on a
+white plate is effectively invisible to a scanner camera. `resolveInk(accent)` computes the WCAG
+relative luminance of the accent against white:
+
+| Ratio | Action |
+|---|---|
+| ≥ 4.5 : 1 | used as-is, silently |
+| 3.0 – 4.5 : 1 | used as-is, with a warning in the sync log and a note in the admin panel |
+| < 3.0 : 1 | darkened toward the brand forest `#063f35` in whole tenths until it clears 3.0 : 1 |
+
+Stepping in whole tenths and taking the first pass is deliberate: it makes the result
+deterministic, which the zero-diff sync depends on.
+
+Every product shipping today clears it, and **nothing is silently altered**:
+
+| Product | Accent | Contrast on white | Outcome |
+|---|---|---|---|
+| NeoBloom | `#5546ae` | 7.31 : 1 | as-is |
+| NeoPonic | `#087d60` | 5.11 : 1 | as-is |
+| NeoFolix | `#1b9272` | 3.89 : 1 | as-is, **with a warning** |
+
+Folix is the one to watch on the print run — see the print checklist in §14.
+
+#### Where the accent comes from
+
+The plugin's QR table has no accent column, so no plugin change was needed for any of this. The
+accent is read from the **already-public** `GET /neokesan/v1/products` endpoint (it has always
+returned `data.accent`), and joined to the registry by slug:
+
+- **`sync-qr.js`** fetches products separately and builds a `slug → accent` map.
+- **`admin.js`** fetches `admin/products` alongside `admin/qr` and joins in the browser, using the
+  authenticated list rather than the public catalog cache — the cache is up to 6 h behind, which
+  would show the *previous* colour to the person who just changed it.
+
+**A product with no accent gets no `qr.svg`.** Not a black one. A black code looks like a perfectly
+good result and would be printed, and it would not match the packaging it is stuck to. The sync
+skips the file, leaves any existing `qr.svg` untouched, logs the skip loudly, and lists it
+separately in the summary — because "0 SVGs changed" on its own reads as success, and for those
+slugs it is not. The redirect page is still written: the code on the box points there regardless of
+what colour it was printed in. `ph-down` is the only slug in this state today; setting an accent in
+the admin panel makes the next sync pick it up, with no other work.
+
+`q/registry.json` now records the resolved accent on each entry. That is the whole point of the file
+being committed — it is the backup if WordPress is ever lost, and without the colour in it a rebuild
+would produce correct codes in the wrong ink.
 
 ---
 
@@ -215,8 +339,14 @@ Base: `https://shop.neokesan.com/wp-json/neokesan/v1`
 | Route | Method | Permission | Purpose |
 |---|---|---|---|
 | `/qr-registry` | GET | **none (public)** | `slug → target` for the sync action |
+| `/products` | GET | **none (public)** | Also the QR **ink colour** source — `data.accent`. Pre-existing; not added for this |
 | `/admin/qr` | GET | Admin token | Every slug with its product context |
 | `/admin/qr/{slug}` | PUT | Admin token | **Change where a printed code points** |
+
+`/products` is the public product catalogue, which has always carried `data.accent`. The QR work
+did not add it and did not change it — it just started reading it, which is why the styling needed
+no plugin release. It returns a **bare array** (keys `0,1,2`), not an `{ok, count, items}`
+envelope; that inconsistency with `/qr-registry` is upstream of this feature and was left alone.
 
 "Admin token" means a bearer token whose user has the `manage_options` capability
 (`Neokesan_Auth::require_admin`) — i.e. the WordPress administrator.
@@ -332,18 +462,27 @@ cron: '23 */6 * * *'   every 6 hours, at :23
 
 `:23` is deliberate — an off-minute, and clear of the price sync at `:17`.
 
+It reads **two** endpoints, both public: `/qr-registry` (which codes exist and where each points)
+and `/products` (the accent each one is inked in). The second is fetched separately because the QR
+admin payload carries no colour at all; it is also why styling needed no plugin change.
+
 ### Failure philosophy: a bad run must never destroy good committed output
 
 Every registry-level check runs **before the first write**, so an abort leaves the filesystem
 untouched and the previously committed pages live. The script aborts, before touching the disk, if:
 
-- the fetch fails (WordPress down, DNS, 5xx, timeout) — retried 3× at 3 s intervals first
-- the response is not the expected `{ok, count, items}` envelope
+- either fetch fails (WordPress down, DNS, 5xx, timeout) — retried 3× at 3 s intervals first
+- the registry is not the expected `{ok, count, items}` envelope
 - `ok` is not true, or `count` disagrees with `items.length`
+- the products response is neither an array nor an `{items[]}` envelope
 - any slug is not a safe path segment (`/^[a-z0-9][a-z0-9_-]{0,79}$/`)
 - any target would break out of an HTML attribute or a JS string
 - the registry came back **empty** while `q/registry.json` still lists codes
 - the run would delete **more than half** the existing pages
+
+The products fetch aborting is deliberate rather than incidental. With no accents every code would
+render **black** — which would rewrite every `qr.svg` with something that looks perfectly valid and
+would be printed.
 
 The last two are the ones that matter. An empty or truncated registry is indistinguishable from
 "every product was deleted", and the naive reaction — prune everything not in the list — would
@@ -378,9 +517,14 @@ commits nothing. A typical run logs:
 
 ```
 Registry OK: 3 code(s).
+Products OK: 3 coloured product(s).
 3 code(s): 0 page(s) and 0 SVG(s) changed.
 Already up to date.
 ```
+
+The styling did not disturb this: the accent is data, the knockout and the wordmark are pure
+functions of the module count and the asset, and `resolveInk()` steps in whole tenths. Re-running
+after the codes went from black to styled reported **0 changed**.
 
 ---
 
@@ -428,7 +572,29 @@ is readable, not merely that it matches what we intended to draw.
 >   proves the plumbing; this is the one test that proves the feature.
 > - **The physical print check.** Print `q/<slug>/qr.svg` at final size and scan it on the actual
 >   packaging material, in dim light, with more than one phone. A code can be verifiably correct
->   and still not scan on dark green stock.
+>   and still not scan on dark green stock. This now matters more, not less: the codes are in
+>   colour, and Folix `#1b9272` sits at 3.89 : 1.
+
+### Styling (2026-09-24)
+
+Re-verified after the codes went from plain black to styled, coloured, wordmarked artwork:
+
+| Check | Result |
+|---|---|
+| All three shipped `qr.svg` decoded with OpenCV | each recovered its exact URL — `https://neokesan.com/q/<slug>/` — from the **shipped bytes**, with the knockout plate and the real embedded wordmark composited in, rendered in the product's actual accent rather than flattened to black |
+| Byte-parity: admin preview vs committed file | identical for all three (bloom 8465 B, folix 8567 B, ponic 8480 B) |
+| `node scripts/sync-qr.js` run twice | second run reports **0 files changed** — determinism preserved, so the zero-diff guarantee survives the styling |
+| Quiet zone | still 4 modules; viewBox is 41 × 41 (33 + 4 + 4) |
+| Smallest legible print | the styled bloom code still decodes at **2 px per module** (82 px across the whole code); only 1 px/module fails, as degenerate. At a 25 mm print the module pitch is ~0.61 mm — far above the threshold |
+| Contrast guard, exercised directly | `#75d7b5` → `#499a82` (3.37 : 1, adjusted); `#ffffff` → `#6a8c86`; `#abc` → `#79969f`; a non-colour → `#000000`. A pale-accent SVG was generated end-to-end and **decoded successfully** |
+| Products-fetch failure | aborts the whole run before any write — deliberate, so accents are never silently absent and no code is ever silently inked black |
+
+The OpenCV check remains the decisive one: it rasterises the shipped bytes and hands the bitmap to
+a decoder that has nothing to do with the renderer that produced them.
+
+One thing this pass did **not** verify, and cannot from here: that the browser actually rasterises
+the SVG to PNG correctly in the admin panel. The SVG half of the parity claim is proven above; the
+PNG half needs a real browser.
 
 ---
 
@@ -439,6 +605,9 @@ is readable, not merely that it matches what we intended to draw.
 | `404` on `/qr-registry` | Plugin older than 0.8.0, or not activated |
 | QR table missing after install | `admin_init` does **not** fire on REST requests. The plugin hooks `rest_api_init` as well (`neokesan-account-api.php:69`), which is why the table exists even with no wp-admin visit. If it is still missing, load any wp-admin page once |
 | Repointed a code, nothing changed | The redirect page is a **committed file**. It updates on the next sync (~6 h), or immediately via `workflow_dispatch` / running the script locally and pushing. The WordPress row updates instantly; the file does not |
+| Sync logs `SKIPPED q/<slug>/qr.svg` | The product has no accent set, so there is no colour to print it in. Set one on the Products tab; the next sync generates it. Deliberately not a black fallback — a black code would look correct and be printed |
+| Admin preview is black, or shows the old colour | The accent is joined from the product list. Black means the product has no `accent` in its `data`. The old colour means `admin/products` was cached — hard-reload |
+| A code prints darker than the accent swatch | Working as designed — `resolveInk()` darkened it to clear 3.0 : 1 against white. The note under the preview names the colour actually used |
 | Sync aborts with "refusing to prune" | Working as designed — a suspiciously large deletion. Investigate, or `NEOKESAN_QR_FORCE=1` if genuine |
 | Sync aborts with "came back empty" | Same guard. If the catalog really is empty, delete `q/` and re-run |
 | A slug starting with `_` behaves oddly | Jekyll skips files and directories beginning with `_`. `mint_slug()` strips leading `_` and `-` so this can never be minted |
@@ -458,6 +627,18 @@ is readable, not merely that it matches what we intended to draw.
   fallback.
 - **No `.nojekyll`.** The live `neoponic/` folder proves these directories deploy fine; adding it
   would change deploy behaviour for no gain.
+- **No `package.json`, no `npm ci`, no CI change.** The sync workflow keeps running bare
+  `node scripts/sync-qr.js`. This is a constraint, not an oversight — see "Why the library is not
+  vendored" in §5.
+- **No `qr-code-styling`.** Evaluated, measured, rejected on three concrete grounds. §5.
+- **No rounded or gradient dot styles.** The reference is square throughout; only square is
+  implemented. Adding more would be more surface to keep identical in two places.
+- **No per-product wordmark tinting.** The wordmark stays brand green in every code, as in the
+  reference. Recolouring it per product would make some of them hard to read at 8 mm.
+- **No vector tracing of the wordmark.** It would print better still — no raster resolution limit
+  at all — but it needs potrace and a visual check that this session cannot do. The bitmap is
+  ~2× the resolution 600 dpi needs at the intended print size, so the gain is small. Worth
+  revisiting if the print size grows.
 
 ---
 
@@ -467,13 +648,20 @@ Before any print run:
 
 1. Admin dashboard → **QR codes** → **Download SVG** for the product.
 2. Confirm the row shows the destination you expect.
-3. Print at final physical size.
-4. Scan with **at least two** phones, at arm's length, in dim light.
-5. Scan the **printed** code on the **actual packaging material**, not on white paper.
+3. Confirm the preview is **in the product's colour**, and read the note under it if there is one.
+   A note means the ink was darkened to stay scannable, or that the contrast is thin enough to be
+   worth the test scan in step 5. A missing code means the product has no accent set yet.
+4. Print at final physical size.
+5. Scan with **at least two** phones, at arm's length, in dim light.
+6. Scan the **printed** code on the **actual packaging material**, not on white paper.
 
 The white plate behind the modules is what makes this work on dark green packaging — which is why
 `qr-render.js` bakes it in rather than using the library's transparent-background default. Error
-correction is level **H** (30% recovery), chosen for printed surfaces that get scuffed.
+correction is level **H** (30% recovery), chosen for printed surfaces that get scuffed, and it is
+also what pays for the knocked-out wordmark in the middle.
+
+**Print from the SVG, never the PNG.** The PNG is for tools that only accept a bitmap; the SVG is
+the vector and scales to any size without resampling.
 
 ---
 
@@ -485,6 +673,8 @@ Redirect page     q/<slug>/index.html      (committed, generated)
 Print file        q/<slug>/qr.svg          (committed, generated)
 Backup            q/registry.json          (committed, generated)
 Source of truth   WordPress: {prefix}neokesan_qr
+Ink colour        product data.accent, via GET /wp-json/neokesan/v1/products
+Wordmark          assets/qr-logo.js        (data URI, embedded in every code)
 Public registry   GET  /wp-json/neokesan/v1/qr-registry
 Admin list        GET  /wp-json/neokesan/v1/admin/qr
 Repoint           PUT  /wp-json/neokesan/v1/admin/qr/<slug>   {"target":"..."}

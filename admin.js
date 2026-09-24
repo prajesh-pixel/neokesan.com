@@ -376,11 +376,53 @@
 
   /* -------------------------- qr tab: list -------------------------- */
 
-  function qrSvgFor(link, name) {
-    // The XML prolog is only legal at the top of a standalone document; it must
-    // go before the SVG is inlined into the page as a preview.
-    return window.NeoKesanQR.buildQrSvg(link, { label: name + ' — ' + link })
-      .replace(/^<\?xml[^>]*\?>\s*/, '');
+  /* The accent colour for a QR row.
+   *
+   * The QR payload has no colour of its own — the plugin's QR table has no
+   * accent column — so it is joined in from the product list. Read from the
+   * freshly fetched admin product list rather than the public catalog cache:
+   * the cache is up to 6 h behind, which would show the previous colour to the
+   * person who just changed it. */
+  function accentFor(slug) {
+    const p = findProduct(slug);
+    const a = (p && p.data && typeof p.data === 'object') ? p.data.accent : '';
+    return (typeof a === 'string' && window.NeoKesanQR.isHexColor(a)) ? a.trim() : null;
+  }
+
+  /* The one place a QR row becomes an SVG. The preview, the SVG download and
+   * the PNG download all go through here, so they cannot disagree about colour
+   * or wordmark. */
+  function qrSvgFor(q) {
+    const link = window.NeoKesanQR.qrLink(q.slug);
+    return window.NeoKesanQR.buildQrSvg(link, {
+      accent: accentFor(q.key || q.slug),
+      label: (q.name || q.slug) + ' — ' + link,
+    });
+  }
+
+  // The XML prolog is only legal at the top of a standalone document, so it has
+  // to come off before the SVG is inlined into the page as a preview.
+  function qrInline(svg) {
+    return svg.replace(/^<\?xml[^>]*\?>\s*/, '');
+  }
+
+  /* One line under the preview when the code is not simply the product's
+   * colour. Silence otherwise — a badge on every row would be noise. */
+  function qrInkNote(accent) {
+    if (!accent) {
+      return '<div class="qr-note">No accent colour set, so nothing is published for this product. ' +
+        'Set one on the Products tab and it appears on the next sync.</div>';
+    }
+    const ink = window.NeoKesanQR.resolveInk(accent);
+    if (ink.adjusted) {
+      return '<div class="qr-note">' + esc(accent) + ' is too pale to scan reliably, so the code ' +
+        'prints as ' + esc(ink.color) + '.</div>';
+    }
+    if (ink.warn) {
+      return '<div class="qr-note">' + esc(accent) + ' is only ' + ink.contrast.toFixed(1) +
+        ':1 against white — worth a test scan on the real print.</div>';
+    }
+    return '';
   }
 
   /* Mirrors Neokesan_QR::sanitize_target() so an obviously bad destination is
@@ -403,10 +445,20 @@
     const content = document.getElementById('tab-content');
     if (!content) return;
     content.innerHTML = '<div class="admin-loading">Loading QR codes…</div>';
-    window.NeoKesanAuth.apiFetch('admin/qr')
-      .then(data => {
+    // The products list is fetched alongside the QR list rather than assumed,
+    // because it is what carries the accent colour. Opening the QR tab directly
+    // — a reload on #qr, say — never runs renderProductsTab(), so `products`
+    // would otherwise be empty and every code would preview as black.
+    Promise.all([
+      window.NeoKesanAuth.apiFetch('admin/qr'),
+      window.NeoKesanAuth.apiFetch('admin/products')
+    ])
+      .then(([data, productData]) => {
         const list = data && Array.isArray(data.items) ? data.items : null;
         if (!list) throw new Error('Unexpected QR list response.');
+        // Bare array, not an {items} envelope. A failure here is not fatal: the
+        // codes still list, they just preview in the fallback colour.
+        if (Array.isArray(productData)) products = productData;
         qrItems = list;
         // Only the DOM write is skipped if the user switched tabs mid-fetch.
         if (tab !== 'qr' || !document.getElementById('tab-content')) return;
@@ -442,7 +494,8 @@
         '<td><div class="field qr-target"><input type="text" spellcheck="false" value="' +
           esc(q.target || '') + '" data-target="' + esc(q.slug) + '"></div></td>' +
         '<td><span class="status-badge st-' + esc(status) + '">' + esc(status) + '</span></td>' +
-        '<td><span class="qr-thumb">' + qrSvgFor(link, q.name || q.slug) + '</span></td>' +
+        '<td><div class="qr-cell"><span class="qr-thumb">' + qrInline(qrSvgFor(q)) + '</span>' +
+          qrInkNote(accentFor(q.key || q.slug)) + '</div></td>' +
         '<td class="row-actions qr-actions">' +
         '<button type="button" class="btn-link" data-save="' + esc(q.slug) + '">Save</button> ' +
         '<button type="button" class="btn-link" data-svg="' + esc(q.slug) + '">SVG</button> ' +
@@ -487,10 +540,7 @@
     });
     el.querySelectorAll('[data-svg]').forEach(btn => btn.onclick = () => {
       const q = findQr(btn.dataset.svg);
-      if (!q) return;
-      const link = window.NeoKesanQR.qrLink(q.slug);
-      downloadBlob(q.slug + '-qr.svg', 'image/svg+xml',
-        window.NeoKesanQR.buildQrSvg(link, { label: (q.name || q.slug) + ' — ' + link }));
+      if (q) downloadBlob(q.slug + '-qr.svg', 'image/svg+xml', qrSvgFor(q));
     });
     el.querySelectorAll('[data-png]').forEach(btn => btn.onclick = () => {
       const q = findQr(btn.dataset.png);
@@ -514,39 +564,43 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  /* The bundled library can only emit a GIF, and its canvas renderer hard-codes
-     the colours and draws no quiet zone — so the PNG is rasterised here from the
-     same module grid the SVG is built from. Print from the SVG; this is for
-     places that only accept a bitmap. */
+  /* Rasterised from the very same SVG string that is previewed and committed,
+     rather than redrawn from the module grid. Drawing the grid would drop the
+     wordmark and the knockout, and would ink the code black — so the PNG would
+     not match the SVG sitting next to it in the same row.
+
+     The draw is safe from canvas tainting because the wordmark is an inline
+     data URI: the SVG references nothing off-origin, so toBlob() works. Print
+     from the SVG; this is for places that only accept a bitmap. */
   function downloadQrPng(q) {
-    const link = window.NeoKesanQR.qrLink(q.slug);
-    const m = window.NeoKesanQR.buildMatrix(link);
+    const svg = qrSvgFor(q);
     const px = 16; // module size in the exported raster
-    const dim = m.size * px;
-    const canvas = document.createElement('canvas');
-    canvas.width = dim;
-    canvas.height = dim;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, dim, dim);
-    ctx.fillStyle = '#000000';
-    for (let r = 0; r < m.count; r++) {
-      for (let c = 0; c < m.count; c++) {
-        if (!m.rows[r][c]) continue;
-        ctx.fillRect((c + m.margin) * px, (r + m.margin) * px, px, px);
-      }
-    }
-    canvas.toBlob(blob => {
-      if (!blob) { window.NeoKesanAuth.showToast('Couldn\'t create the PNG.'); return; }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = q.slug + '-qr.png';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }, 'image/png');
+    const m = /viewBox="0 0 (\d+) (\d+)"/.exec(svg);
+    const dim = (m ? Number(m[1]) : 41) * px;
+
+    const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = dim;
+      canvas.height = dim;
+      const ctx = canvas.getContext('2d');
+      // The SVG carries its own white plate; filling first as well costs nothing
+      // and means the PNG is opaque even if that ever stops being true.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, dim, dim);
+      ctx.drawImage(img, 0, 0, dim, dim);
+      URL.revokeObjectURL(svgUrl);
+      canvas.toBlob(blob => {
+        if (!blob) { window.NeoKesanAuth.showToast('Couldn\'t create the PNG.'); return; }
+        downloadBlob(q.slug + '-qr.png', 'image/png', blob);
+      }, 'image/png');
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(svgUrl);
+      window.NeoKesanAuth.showToast('Couldn\'t rasterise the code for download.');
+    };
+    img.src = svgUrl;
   }
 
   function findProduct(key) {
