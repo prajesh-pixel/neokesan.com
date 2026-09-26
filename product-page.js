@@ -138,7 +138,9 @@
     const content = document.getElementById('product-content');
     if (!p.key || !content) { renderNotFound(); return; }
 
-    maybeLogView(p.key);
+    // An admin previewing an unpublished product must not inflate its view
+    // count — nobody has actually seen this page yet.
+    if (entry.status !== 'draft') maybeLogView(p.key);
     document.title = p.name + ' | neoKesan';
     document.documentElement.style.setProperty('--p-accent', p.accent);
     document.documentElement.style.setProperty('--p-soft', p.soft);
@@ -147,7 +149,14 @@
       ? `<a href="${p.amazonUrl}" target="_blank" rel="noopener" class="buy-now amazon-buy-btn">Buy on Amazon</a>`
       : `<a href="index.html#products" class="buy-now amazon-buy-btn">Browse products</a>`;
 
+    // Only an admin ever reaches a draft, so this banner is never seen by a
+    // customer. entry.status is absent on public rows.
+    const draftBanner = entry.status === 'draft'
+      ? `<div class="draft-banner"><b>Draft</b><span>Only you can see this page. Customers see nothing until you set this product to <em>active</em>.</span><a href="admin.html">Publish it in the dashboard</a></div>`
+      : '';
+
     content.innerHTML =
+      draftBanner +
       `<div class="crumb"><a href="index.html">Home</a> / <a href="index.html#products">Products</a> / ${p.name} ${p.family}</div>` +
       `<main>` +
         `<section class="product-hero">` +
@@ -283,7 +292,13 @@
     if (typeof catalog.load === 'function') {
       catalog.load().then(function () { render(); });
     }
+    // A draft lives in the admin overlay, which loads independently of the
+    // public catalog and may land after this boot — without this the draft key
+    // would stay stuck on the not-found card. Fires once immediately, too.
+    if (typeof catalog.subscribeAdmin === 'function') {
+      catalog.subscribeAdmin(function () { render(); });
+    }
   });
 
-  console.log('[neoKesan] product-page v20260810c');
+  console.log('[neoKesan] product-page v20260926a');
 })();

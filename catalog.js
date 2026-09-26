@@ -8,10 +8,20 @@
  *   - a bundled fallback copy of the seed catalog (works offline / backend-down)
  *   - a 24 h localStorage cache so snapshot() paints instantly on repeat visits
  *   - load(): fetch fresh -> cache -> notify subscribers (re-render)
+ *   - an admin-only DRAFT overlay (loadAdmin/clearAdmin/listAdmin/subscribeAdmin)
  *
  * Rendering pattern (used by every consumer): paint immediately from snapshot(),
  * then re-render when load() resolves. No blank flash, and admin edits propagate
  * as soon as a fresh fetch lands.
+ *
+ * Draft overlay: GET /admin/products is admin-gated and returns every product
+ * with its status. Signed-in admins get the status='draft' rows in a SEPARATE,
+ * memory-only list so they can preview unpublished products in the header menu
+ * and on product.html. The overlay is deliberately never merged into `current`
+ * and never written to the cache: neokesan_catalog_v1 is read by snapshot() on
+ * every later page load and survives sign-out, so caching a draft there would
+ * leak it to the next person to use that browser. For the same reason the
+ * homepage grid (script.js -> snapshot()/subscribe()) stays draft-free for free.
  *
  * Load order on every page: catalog.js MUST come before shared-layout.js (the
  * header dropdown repopulation reads this object at DOMContentLoaded).
@@ -292,6 +302,11 @@
   let current = null;        // in-memory catalog (array of public payloads)
   let subscribers = [];
 
+  // Admin-only overlay of status='draft' products. Memory-only by design — see
+  // the header note. Empty for everyone who is not a signed-in admin.
+  let drafts = [];
+  let draftSubscribers = [];
+
   /* ------------------------------------------------------------- cache */
 
   function readCache() {
@@ -370,6 +385,11 @@
     for (let i = 0; i < current.length; i++) {
       if (current[i].slug === key) return current[i];
     }
+    // Admin-only fallback: a draft is reachable by slug on product.html, but it
+    // is not in `current`, so the homepage grid can never see it.
+    for (let j = 0; j < drafts.length; j++) {
+      if (drafts[j].slug === key) return drafts[j];
+    }
     return null;
   }
 
@@ -395,11 +415,82 @@
     return current;
   }
 
+  /* ------------------------------------------------------- draft overlay */
+  /* Everything below feeds the admin-only preview of unpublished products.
+   * It never reads or writes `current`, the cache, or `subscribers`. */
+
+  function notifyAdmin() {
+    draftSubscribers.forEach(fn => { try { fn(drafts); } catch (e) { /* never break the loop */ } });
+  }
+
+  // An admin row is the public shape plus `status`; normalizeEntry already
+  // derives page/amazonUrl from the slug/asin, so only the status needs adding.
+  function normalizeDraft(row) {
+    const entry = normalizeEntry(row);
+    if (!entry) return null;
+    entry.status = 'draft';
+    return entry;
+  }
+
+  // Replace the overlay from a full admin list (the admin/products response, or
+  // the list admin.js already holds). Archived rows are dropped on purpose:
+  // archived means "hidden from the site", admin included.
+  function setAdminFresh(rows) {
+    drafts = (Array.isArray(rows) ? rows : [])
+      .filter(r => r && r.status === 'draft')
+      .map(normalizeDraft)
+      .filter(Boolean);
+    notifyAdmin();
+    return drafts.slice();
+  }
+
+  function listAdmin() {
+    return drafts.slice();
+  }
+
+  // Same contract as subscribe(): returns an unsubscribe. Unlike subscribe() it
+  // also fires immediately, because the overlay is loaded independently of the
+  // public catalog and may resolve first, last, or not at all.
+  function subscribeAdmin(fn) {
+    if (typeof fn !== 'function') return () => {};
+    draftSubscribers.push(fn);
+    try { fn(drafts.slice()); } catch (e) { /* subscriber errors never break */ }
+    return () => { draftSubscribers = draftSubscribers.filter(f => f !== fn); };
+  }
+
+  function clearAdmin() {
+    const had = drafts.length > 0;
+    drafts = [];
+    if (had) notifyAdmin();
+    return drafts.slice();
+  }
+
+  // Fetch the draft rows for a signed-in admin. Any failure — no token, expired
+  // token (401), not an admin (403), offline — clears the overlay rather than
+  // leaving stale drafts on screen. Uses raw fetch + the localStorage token
+  // rather than NeoKesanAuth.apiFetch: catalog.js loads before auth.js on every
+  // page, and the ?cb= buster defeats Hostinger's 7-day GET cache.
+  function loadAdmin() {
+    let token = null;
+    try { token = localStorage.getItem('neokesan_token'); } catch (e) { /* private mode */ }
+    if (!token) { clearAdmin(); return Promise.resolve([]); }
+    return fetch(API_BASE + 'admin/products?cb=' + Date.now(), { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(res => {
+        if (!res.ok) throw new Error('admin catalog request failed (' + res.status + ')');
+        return res.json();
+      })
+      .then(rows => setAdminFresh(rows))
+      .catch(() => clearAdmin());
+  }
+
   /* ------------------------------------------------------------- boot */
 
   // Seed the in-memory catalog synchronously so get()/list() work immediately.
   snapshot();
 
-  window.NeoKesanCatalog = { snapshot, load, get, list, subscribe, setFresh };
-  console.log('[neoKesan] catalog v20260810c');
+  window.NeoKesanCatalog = {
+    snapshot, load, get, list, subscribe, setFresh,
+    loadAdmin, clearAdmin, listAdmin, subscribeAdmin, setAdminFresh
+  };
+  console.log('[neoKesan] catalog v20260926a');
 })();

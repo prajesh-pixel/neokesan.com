@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  console.log('[neoKesan] admin v20260810e');
+  console.log('[neoKesan] admin v20260926a');
 
   // Question prompts (mirror script.js) so attempts render as Q -> answer.
   const QUIZ_QUESTIONS = [
@@ -618,11 +618,16 @@
   }
 
   /* Push the current admin list into the public catalog cache so the homepage,
-   * header menu and product pages reflect a mutation immediately. Hostinger's
-   * CDN caches GET /products for days, so we must NOT re-fetch it here. */
+   * header menu and product pages reflect a mutation immediately, and into the
+   * admin-only draft overlay so a product just saved as a draft is previewable
+   * without a reload. Hostinger's CDN caches GET /products for days, so we must
+   * NOT re-fetch it here. */
   function refreshCatalogAfterSave() {
     const catalog = window.NeoKesanCatalog;
     if (!catalog || typeof catalog.setFresh !== 'function') return;
+    // Outside the publicList guard below on purpose: setAdminFresh must still run
+    // when a save leaves zero active products.
+    if (typeof catalog.setAdminFresh === 'function') catalog.setAdminFresh(products);
     const publicList = products
       .filter(p => p && p.status === 'active')
       .map(p => {

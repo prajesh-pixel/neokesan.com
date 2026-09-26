@@ -50,3 +50,13 @@
 .notfound-card h1{font-size:30px;letter-spacing:-.05em;margin:0 0 10px}
 .notfound-card p{font-size:14px;color:#617d74;line-height:1.6;margin:0 0 24px}
 
+/* Draft preview banner — rendered above the product page for a signed-in admin
+   looking at a status='draft' product. A customer never receives this markup. */
+.draft-banner{max-width:1180px;margin:16px auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--p-soft);border:1px solid color-mix(in srgb,var(--p-accent) 30%,white);border-left:4px solid var(--p-accent);border-radius:12px;padding:16px 20px}
+.draft-banner b{background:var(--p-accent);color:#fff;border-radius:20px;padding:3px 12px;font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+.draft-banner span{flex:1;min-width:220px;font-size:13px;line-height:1.5;color:#4d6b62}
+.draft-banner em{font-style:normal;font-weight:700;color:var(--p-accent)}
+.draft-banner a{color:var(--p-accent);font-size:13px;font-weight:700;text-decoration:none}
+.draft-banner a:hover{text-decoration:underline}
+@media(max-width:760px){.draft-banner{margin:16px}}
+

@@ -8,7 +8,7 @@ function esc(str) {
 }
 
 function mountSharedLayout() {
-  console.log('[neoKesan] shared-layout v20260915a');
+  console.log('[neoKesan] shared-layout v20260926a');
   document.querySelectorAll('[data-site-header]').forEach(node => node.innerHTML = siteHeader);
   document.querySelectorAll('[data-site-footer]').forEach(node => node.innerHTML = siteFooter);
 
@@ -39,7 +39,14 @@ function mountSharedLayout() {
     if (!token) return;
     adminChecked = true; // set before the fetch so the 1s poll never re-fires it
     fetch(API_BASE + 'admin/stats?cb=' + Date.now(), { headers: { 'Authorization': 'Bearer ' + token } })
-      .then(res => document.querySelectorAll('.admin-btn').forEach(btn => btn.style.display = res.ok ? '' : 'none'))
+      .then(res => {
+        document.querySelectorAll('.admin-btn').forEach(btn => btn.style.display = res.ok ? '' : 'none');
+        // A verified admin also gets the unpublished products for preview. This
+        // is the only trigger: a non-admin's overlay stays empty forever.
+        if (res.ok && window.NeoKesanCatalog && typeof window.NeoKesanCatalog.loadAdmin === 'function') {
+          window.NeoKesanCatalog.loadAdmin();
+        }
+      })
       .catch(() => {}); // network hiccup -> button stays hidden, retried next sign-in
   }
   let lastSignedIn = null; // guard: only touch the DOM when the state actually changed
@@ -54,6 +61,12 @@ function mountSharedLayout() {
     } else {
       adminChecked = false; // reset so the next sign-in gets a fresh probe
       document.querySelectorAll('.admin-btn').forEach(btn => btn.style.display = 'none');
+      // Drop the draft preview with the session. Sign-out, a 401-expired token,
+      // a sign-out in another tab and the 1 s poll all land here, so this is the
+      // one place that has to drop it.
+      if (window.NeoKesanCatalog && typeof window.NeoKesanCatalog.clearAdmin === 'function') {
+        window.NeoKesanCatalog.clearAdmin();
+      }
     }
   }
   updateAuthUI();
@@ -103,21 +116,32 @@ function mountSharedLayout() {
     document.addEventListener('click', event => { if (!holder.contains(event.target)) holder.classList.remove('open'); });
   });
 
-  // Repopulate the Products dropdown from the catalog. The static links above
-  // stay until this resolves (nav never blank); once the fresh list lands,
-  // every product the admin saved shows here.
-  if (window.NeoKesanCatalog && typeof window.NeoKesanCatalog.load === 'function') {
-    window.NeoKesanCatalog.load().then(entries => {
-      const items = (Array.isArray(entries) ? entries : []).filter(e => e && e.slug && e.data && typeof e.data === 'object');
-      if (!items.length) return;
-      const links = items.map(e => {
-        const d = e.data;
-        const label = (d.name || e.name || e.slug) + (d.family ? ' ' + d.family : '');
-        const sub = d.category || '';
-        return `<a href="product.html?key=${encodeURIComponent(e.slug)}">${esc(label)}${sub ? ` <small>${esc(sub)}</small>` : ''}</a>`;
-      }).join('');
-      document.querySelectorAll('.home-dropdown-panel').forEach(panel => { panel.innerHTML = links; });
-    }).catch(() => {});
+  // Repopulate the Products dropdown from the catalog. The static links in the
+  // header template stay until the first paint (nav never blank), after which the
+  // panel is rebuilt whenever either list changes. The public catalog and the
+  // admin-only draft overlay load independently and can land in either order, so
+  // the paint is subscription-driven rather than a one-shot .then().
+  const catalog = window.NeoKesanCatalog;
+  function paintProductMenu() {
+    if (!catalog || typeof catalog.list !== 'function') return;
+    const admin = typeof catalog.listAdmin === 'function' ? catalog.listAdmin() : [];
+    const items = catalog.list().concat(admin).filter(e => e && e.slug && e.data && typeof e.data === 'object');
+    if (!items.length) return;
+    const links = items.map(e => {
+      const d = e.data;
+      const isDraft = e.status === 'draft';
+      const label = (d.name || e.name || e.slug) + (d.family ? ' ' + d.family : '');
+      const sub = d.category || '';
+      const chip = isDraft ? '<em class="draft-chip">Draft</em>' : '';
+      return `<a href="product.html?key=${encodeURIComponent(e.slug)}"${isDraft ? ' class="is-draft"' : ''}>${esc(label)}${sub ? ` <small>${esc(sub)}</small>` : ''}${chip}</a>`;
+    }).join('');
+    document.querySelectorAll('.home-dropdown-panel').forEach(panel => { panel.innerHTML = links; });
+  }
+  if (catalog && typeof catalog.subscribe === 'function') {
+    catalog.subscribe(paintProductMenu);
+    // Fires immediately with whatever the overlay holds (empty for a non-admin).
+    if (typeof catalog.subscribeAdmin === 'function') catalog.subscribeAdmin(paintProductMenu);
+    if (typeof catalog.load === 'function') catalog.load();
   }
   document.querySelectorAll('.auth-trigger').forEach(button => button.addEventListener('click', () => {
     const modal = document.querySelector('#auth-modal');
