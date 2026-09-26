@@ -361,9 +361,24 @@
     };
   }
 
+  // localStorage holds a copy of an earlier API response, so it can predate the
+  // repair above — and load() only rewrites it after a *successful* fetch, so a
+  // cached row keeps its mangled URL until the next good fetch lands. Heal on
+  // read, otherwise the first paint (and any visit where the fetch fails) shows
+  // blank images even though the catalog itself is fine. Entry identity is
+  // preserved unless an image actually needs repairing, so consumers that hold
+  // a reference see no spurious change.
+  function healImages(entries) {
+    return entries.map(entry => {
+      const d = entry && entry.data;
+      if (!d || !Array.isArray(d.images) || !d.images.some(u => repairImage(u) !== u)) return entry;
+      return Object.assign({}, entry, { data: Object.assign({}, d, { images: d.images.map(repairImage) }) });
+    });
+  }
+
   function snapshot() {
     const cached = readCache();
-    current = cached && cached.length ? cached : FALLBACK;
+    current = cached && cached.length ? healImages(cached) : FALLBACK;
     return current;
   }
 
@@ -510,5 +525,5 @@
     // passes through normalizeEntry(), so it applies the same repair itself.
     repairImage
   };
-  console.log('[neoKesan] catalog v20260926b');
+  console.log('[neoKesan] catalog v20260926c');
 })();
