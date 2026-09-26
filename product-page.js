@@ -53,6 +53,51 @@
     return { hydro: normalizeStages(guide.hydro), soil: normalizeStages(guide.soil) };
   }
 
+  /* ------------------------------------------------------------ soft guard */
+
+  // The theme pairs --p-accent (text) with --p-soft (the surface behind it):
+  // .comp-table th, .tds-badge, .tds-box, .step-num, .ratio-box and the draft
+  // banner all paint accent text on a soft background, and .product-stage uses
+  // soft as the base of the hero gradient. That only reads while soft is a pale
+  // tint. A soft saved as a dark colour — or, as on the live site, as the accent
+  // itself — paints dark on dark and the "Element", "mg in 1 ml" and ppm text
+  // disappear. So don't trust the stored value: tint the accent instead.
+
+  // #abc / #abcd / #aabbcc / #aabbccdd -> [r,g,b], alpha dropped. Null for
+  // anything else (named colours, rgb(), ...).
+  function hexRgb(value) {
+    const m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(String(value || '').trim());
+    if (!m) return null;
+    let h = m[1];
+    if (h.length === 4 || h.length === 8) h = h.slice(0, h.length - 1);
+    if (h.length === 3) h = h.replace(/(.)/g, '$1$1');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+
+  function rgbHex(rgb) {
+    return '#' + rgb.map(function (v) {
+      const n = Math.max(0, Math.min(255, Math.round(v)));
+      return (n < 16 ? '0' : '') + n.toString(16);
+    }).join('');
+  }
+
+  // WCAG relative luminance: 0 = black, 1 = white.
+  function luminance(rgb) {
+    function channel(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+    return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+  }
+
+  // Anything below this is too dark to carry the dark and accent text that sits
+  // on it. Comfortably above the pale tints the seed uses (#eeedfe ≈ 0.86).
+  const SOFT_MIN_LUMINANCE = 0.72;
+  const DEFAULT_ACCENT = [85, 70, 174]; // #5546ae, the template's own fallback
+
+  function safeSoft(accent, soft) {
+    const rgb = hexRgb(soft);
+    if (rgb && luminance(rgb) >= SOFT_MIN_LUMINANCE) return soft;
+    return rgbHex((hexRgb(accent) || DEFAULT_ACCENT).map(function (v) { return v * 0.1 + 255 * 0.9; }));
+  }
+
   // Map one public catalog payload ({slug,name,asin,page,amazonUrl,data}) into
   // the render shape used by the template below.
   function normalizeProduct(raw) {
@@ -66,7 +111,7 @@
       category: d.category || '',
       word: d.word || '',
       accent: d.accent || '#5546ae',
-      soft: d.soft || '#eeedfe',
+      soft: safeSoft(d.accent, d.soft),
       description: d.description || '',
       formula: d.formula || '',
       features: Array.isArray(d.features) ? d.features : [],
@@ -300,5 +345,5 @@
     }
   });
 
-  console.log('[neoKesan] product-page v20260926a');
+  console.log('[neoKesan] product-page v20260926b');
 })();
