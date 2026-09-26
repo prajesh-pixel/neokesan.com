@@ -330,11 +330,26 @@
 
   /* ------------------------------------------------------------- api */
 
+  // WordPress's esc_url_raw() prepends "http://" to any URL that carries no
+  // scheme and doesn't start with "/", "#" or "?" — so the relative seed path
+  // "assets/neobloom.jpeg" was persisted as "http://assets/neobloom.jpeg", a
+  // host that doesn't resolve, and every product image went blank. The plugin
+  // is being fixed at the source, but rows written before that fix still hold
+  // the mangled value, so repair on read. "assets" is never a real host, which
+  // is why this can't misfire on a legitimate URL.
+  function repairImage(url) {
+    return typeof url === 'string' ? url.replace(/^https?:\/\/assets\//i, 'assets/') : url;
+  }
+
   // Normalize one raw API row into the canonical public payload. Defensive
   // against a malformed row (missing slug/data) rather than crashing the page.
   function normalizeEntry(item) {
     if (!item || typeof item !== 'object' || !item.slug) return null;
-    const data = (item.data && typeof item.data === 'object') ? item.data : {};
+    let data = (item.data && typeof item.data === 'object') ? item.data : {};
+    // Copy rather than mutate: setFresh() is handed admin.js's own array.
+    if (Array.isArray(data.images) && data.images.some(u => repairImage(u) !== u)) {
+      data = Object.assign({}, data, { images: data.images.map(repairImage) });
+    }
     return {
       slug: item.slug,
       name: item.name || data.name || item.slug,
@@ -490,7 +505,10 @@
 
   window.NeoKesanCatalog = {
     snapshot, load, get, list, subscribe, setFresh,
-    loadAdmin, clearAdmin, listAdmin, subscribeAdmin, setAdminFresh
+    loadAdmin, clearAdmin, listAdmin, subscribeAdmin, setAdminFresh,
+    // The admin dashboard reads image URLs straight off the admin API and never
+    // passes through normalizeEntry(), so it applies the same repair itself.
+    repairImage
   };
-  console.log('[neoKesan] catalog v20260926a');
+  console.log('[neoKesan] catalog v20260926b');
 })();

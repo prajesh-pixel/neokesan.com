@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  console.log('[neoKesan] admin v20260926a');
+  console.log('[neoKesan] admin v20260926b');
 
   // Question prompts (mirror script.js) so attempts render as Q -> answer.
   const QUIZ_QUESTIONS = [
@@ -775,7 +775,11 @@
   function openProductForm(p) {
     editing = p || null;
     const d = (p && p.data && typeof p.data === 'object') ? p.data : {};
-    imagesState = Array.isArray(d.images) ? d.images.slice() : [];
+    // Rows saved while the plugin forced relative paths through esc_url_raw()
+    // hold "http://assets/..." — repair on load so the thumbnails render and the
+    // save payload below carries the clean path back to the database.
+    const fixImage = (window.NeoKesanCatalog && window.NeoKesanCatalog.repairImage) || (u => u);
+    imagesState = Array.isArray(d.images) ? d.images.map(fixImage) : [];
     const isEdit = !!p;
 
     const statusOpts = ['active', 'draft', 'archived'].map(s =>
